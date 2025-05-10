@@ -1,0 +1,4 @@
+node_modules/
+extension/icons/
+.DS_Store
+*.zip
