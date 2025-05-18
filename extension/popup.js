@@ -1,5 +1,7 @@
-// Business Registration Assistant - Popup Script
-// Minimal implementation that only displays detection results
+/**
+ * Business Registration Assistant - Popup Script
+ * Simple implementation to display detection results
+ */
 
 // DOM elements
 const statusIndicator = document.getElementById('status-indicator');
@@ -13,6 +15,8 @@ const checkAgainButton = document.getElementById('check-again');
 
 // Initialize when popup opens
 document.addEventListener('DOMContentLoaded', function() {
+  console.log('[BRA] Popup opened');
+  
   // Get current tab
   chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
     if (tabs && tabs[0]) {
@@ -29,7 +33,7 @@ document.addEventListener('DOMContentLoaded', function() {
       if (tabs && tabs[0]) {
         // Ask content script to run detection
         chrome.tabs.sendMessage(tabs[0].id, {
-          action: 'getDetection'
+          action: 'triggerDetection'
         }, function() {
           // Wait a moment for detection to finish
           setTimeout(function() {
@@ -44,14 +48,33 @@ document.addEventListener('DOMContentLoaded', function() {
 // Get detection result from background script
 function getDetectionResult(tabId) {
   chrome.runtime.sendMessage({
-    action: 'getDetection',
+    action: 'getDetectionResult',
     tabId: tabId
   }, function(response) {
     if (response && response.success && response.result) {
       // Show detection result
       updateUI(response.result);
     } else {
-      // Show no detection
+      // Try asking content script directly
+      askContentScript(tabId);
+    }
+  });
+}
+
+// Ask content script for results if background doesn't have them
+function askContentScript(tabId) {
+  chrome.tabs.sendMessage(tabId, {
+    action: 'getDetectionResult'
+  }, function(result) {
+    if (chrome.runtime.lastError) {
+      // Content script not available
+      showNoDetection();
+      return;
+    }
+    
+    if (result) {
+      updateUI(result);
+    } else {
       showNoDetection();
     }
   });
@@ -59,7 +82,7 @@ function getDetectionResult(tabId) {
 
 // Update UI with detection result
 function updateUI(result) {
-  if (!result || !result.isBusinessForm) {
+  if (!result || !result.isBusinessRegistrationForm) {
     showNoDetection();
     return;
   }
@@ -76,7 +99,7 @@ function updateUI(result) {
   stateValue.textContent = result.state ? getStateName(result.state) : 'Unknown';
   
   // Update confidence
-  const confidence = result.confidence;
+  const confidence = result.confidenceScore;
   confidenceBar.style.width = Math.min(confidence, 100) + '%';
   confidenceValue.textContent = confidence + '%';
 }

@@ -1,45 +1,53 @@
-# Minimal Business Registration Assistant Extension
+# Business Registration Assistant
 
-This is an extremely simple, minimal implementation of the Business Registration Assistant Chrome extension. It's designed to be reliable and guaranteed to work without any advanced features or complexity.
+A simple Chrome extension that detects business registration forms on websites and provides basic assistance.
 
-## What It Does
+## Project Structure
 
-- Detects business registration forms on websites using basic keyword analysis
-- Shows a checkmark badge on the extension icon when a form is detected
-- Displays a simple popup with detection information
-- Includes minimal "Form Assistance" UI elements
+This project has a clean, simplified structure:
 
-## Files
+- **docs/**: Documentation for the extension
+- **knowledge/**: Knowledge base data for business registration forms
+- **extension/**: The main extension code
+  - manifest.json: Extension configuration
+  - content.js: Form detection script
+  - background.js: Background service worker
+  - popup.html/css/js: Popup UI files
+  - icons/: Extension icons
 
-All files are in a single directory:
+## Features
 
-- `manifest.json` - Basic Manifest V3 configuration with minimal permissions
-- `content.js` - Simple script that detects business registration forms
-- `background.js` - Minimal script that handles messaging between components
-- `popup.html` - Basic popup HTML structure
-- `popup.css` - Simple styling for the popup
-- `popup.js` - Minimal script to display detection results
-- `icon.png` - Simple placeholder icon
+- Detects business registration forms on websites
+- Shows detection status in extension popup
+- Identifies state (when possible)
+- Displays confidence score
+- Simple UI for form assistance options
 
 ## Installation
 
 1. In Chrome, go to `chrome://extensions/`
 2. Enable "Developer mode" with the toggle in the top-right corner
-3. Click "Load unpacked" and select the directory containing these files
-4. The extension should now be installed
+3. Click "Load unpacked" and select the `extension` directory
+4. The extension is now installed and ready to use
 
-## How to Test
+## Usage
 
-1. Visit a business registration website (e.g., a state government business registration page)
-2. The extension should detect the form and show a checkmark on the icon
+1. Visit a business registration website (government sites work best)
+2. The extension icon will show a checkmark if a form is detected
 3. Click the extension icon to see detection details
 4. Use the "Check Again" button if needed
 
-## Notes
+## Technical Details
 
-- This is an absolute minimal implementation focused on reliability
-- Action buttons in the UI are display-only and don't perform real actions
-- The detection algorithm uses simple keyword matching
-- The popup shows only the essential information
+The extension uses a simple detection algorithm that analyzes:
+- URL patterns (government domains, business-related terms)
+- Page content (business entity terms, registration phrases)
+- Form elements (fields related to business registration)
 
-This extension serves as a simple starting point that you can build upon once you confirm it's working properly.
+The detection result includes:
+- Whether it's a business registration form
+- Confidence score (0-100%)
+- State identification (if possible)
+- Detailed scores for different aspects of the analysis
+
+This is a minimal implementation focused on reliability and core functionality.
