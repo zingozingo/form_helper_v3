@@ -1,117 +1,56 @@
-/**
- * Business Registration Assistant - Simplified Background Script
- * 
- * Focused on reliable state management and communication between components.
- */
+// Business Registration Assistant - Background Script
+// Minimal implementation with simple state management
 
-// Store detection results by tab ID
-const detectionResults = {};
+// Simple variable to store latest detection by tab
+let detectionResults = {};
 
-// Handle errors consistently
-function handleError(context, error) {
-  console.error(`[Business Registration Assistant] Error in ${context}:`, error);
-}
-
-// Update extension badge based on detection status
-function updateBadge(tabId, isDetected, confidenceScore = 0) {
-  try {
-    const badgeText = isDetected ? '✓' : '';
-    const badgeColor = confidenceScore >= 80 ? '#4CAF50' : // Green for high confidence
-                       confidenceScore >= 60 ? '#FFC107' : // Yellow for medium confidence
-                       '#CCCCCC';                          // Gray for low confidence
+// Listen for messages from content script
+chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
+  // Save detection result from content script
+  if (message.action === 'detectionResult' && sender.tab) {
+    const tabId = sender.tab.id;
+    detectionResults[tabId] = message.result;
     
-    chrome.action.setBadgeText({ text: badgeText, tabId });
-    chrome.action.setBadgeBackgroundColor({ color: badgeColor, tabId });
-  } catch (error) {
-    handleError('updateBadge', error);
-  }
-}
-
-// Clear detection state for a tab
-function clearTabState(tabId) {
-  try {
-    delete detectionResults[tabId];
-    updateBadge(tabId, false);
-  } catch (error) {
-    handleError('clearTabState', error);
-  }
-}
-
-// Message handler with robust error handling
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  try {
-    const tabId = sender.tab?.id;
-    
-    switch (message.action) {
-      case 'formDetected':
-        if (!tabId) {
-          sendResponse({ success: false, error: 'No tab ID provided' });
-          return true;
-        }
-        
-        // Store detection result
-        detectionResults[tabId] = message.result;
-        
-        // Update badge
-        updateBadge(tabId, true, message.result.confidenceScore);
-        
-        sendResponse({ success: true });
-        break;
-        
-      case 'getDetectionResult':
-        const requestedTabId = message.tabId || tabId;
-        
-        if (!requestedTabId) {
-          sendResponse({ success: false, error: 'No tab ID available' });
-          return true;
-        }
-        
-        sendResponse({ 
-          success: true,
-          result: detectionResults[requestedTabId] || null 
-        });
-        break;
-        
-      default:
-        sendResponse({ success: false, error: 'Unknown action' });
+    // Update badge if it's a business form
+    if (message.result.isBusinessForm) {
+      chrome.action.setBadgeText({
+        text: '✓',
+        tabId: tabId
+      });
+      
+      chrome.action.setBadgeBackgroundColor({
+        color: '#4CAF50',
+        tabId: tabId
+      });
     }
-  } catch (error) {
-    handleError('messageHandler', error);
-    sendResponse({ success: false, error: error.message });
+    
+    console.log('BRA: Stored detection for tab', tabId, message.result);
   }
   
-  // Keep message channel open for async responses
-  return true;
-});
-
-// Handle tab updates
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  try {
-    // Only process if the page has completed loading
-    if (changeInfo.status === 'complete') {
-      // Reset detection state
-      clearTabState(tabId);
-      
-      // Trigger detection in content script
-      chrome.tabs.sendMessage(
-        tabId, 
-        { action: 'triggerDetection' },
-        (response) => {
-          // Ignore expected errors when content script isn't ready
-          if (chrome.runtime.lastError) return;
-        }
-      );
+  // Return detection result to popup
+  if (message.action === 'getDetection') {
+    const tabId = message.tabId;
+    
+    if (tabId && detectionResults[tabId]) {
+      sendResponse({
+        success: true,
+        result: detectionResults[tabId]
+      });
+    } else {
+      sendResponse({
+        success: false,
+        message: 'No detection available'
+      });
     }
-  } catch (error) {
-    handleError('tabUpdated', error);
   }
+  
+  return true; // Keep message channel open
 });
 
-// Clean up when tabs are closed
-chrome.tabs.onRemoved.addListener((tabId) => {
-  try {
-    clearTabState(tabId);
-  } catch (error) {
-    handleError('tabRemoved', error);
+// Clean up when tabs are removed
+chrome.tabs.onRemoved.addListener(function(tabId) {
+  if (detectionResults[tabId]) {
+    delete detectionResults[tabId];
+    console.log('BRA: Removed data for closed tab', tabId);
   }
 });
