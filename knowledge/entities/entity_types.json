@@ -1,0 +1,208 @@
+{
+  "entity_types": {
+    "llc": {
+      "name": "Limited Liability Company (LLC)",
+      "description": "A flexible business structure that combines the liability protection of a corporation with the tax benefits and simplicity of a partnership.",
+      "advantages": [
+        "Limited liability protection for all members",
+        "Pass-through taxation by default",
+        "Flexible management structure",
+        "Fewer formalities and paperwork than corporations",
+        "No restriction on number of owners",
+        "Flexible profit distribution"
+      ],
+      "disadvantages": [
+        "Self-employment taxes for active members",
+        "Potentially higher fees in some states",
+        "Less established legal precedent than corporations",
+        "May be more difficult to raise capital"
+      ],
+      "taxation": {
+        "default": "Pass-through (reported on owners' personal tax returns)",
+        "options": [
+          "Disregarded entity (single-member)",
+          "Partnership (multi-member)",
+          "S Corporation (requires election)",
+          "C Corporation (requires election)"
+        ]
+      },
+      "management": {
+        "types": [
+          "Member-managed: All owners participate in management",
+          "Manager-managed: Designated managers (can be members or non-members) handle operations"
+        ]
+      },
+      "common_forms": {
+        "formation": "Articles of Organization / Certificate of Formation",
+        "governance": "Operating Agreement (internal document, typically not filed with state)"
+      }
+    },
+    "corporation": {
+      "name": "Corporation (C Corporation)",
+      "description": "A legal entity separate from its owners, providing the strongest liability protection but subject to more regulations and potential double taxation.",
+      "advantages": [
+        "Limited liability protection for all shareholders",
+        "Perpetual existence",
+        "Easier to raise capital through stock sales",
+        "Established legal precedent",
+        "Potential tax advantages for reinvested profits",
+        "More attractive to investors"
+      ],
+      "disadvantages": [
+        "Double taxation (corporate level and shareholder level)",
+        "More formalities and compliance requirements",
+        "Higher startup and maintenance costs",
+        "Less flexibility in management and profit distribution"
+      ],
+      "taxation": {
+        "default": "C Corporation (separate entity paying corporate tax rates)",
+        "options": [
+          "S Corporation (pass-through taxation, requires election and has ownership restrictions)"
+        ]
+      },
+      "management": {
+        "structure": "Board of Directors oversees major decisions, Officers handle day-to-day operations, Shareholders own the company and elect the board"
+      },
+      "common_forms": {
+        "formation": "Articles of Incorporation / Certificate of Incorporation",
+        "governance": "Bylaws (internal document, typically not filed with state)",
+        "meetings": "Meeting minutes and resolutions"
+      }
+    },
+    "s_corporation": {
+      "name": "S Corporation",
+      "description": "A corporation that elects to pass corporate income, losses, deductions, and credits through to shareholders for federal tax purposes.",
+      "advantages": [
+        "Limited liability protection for all shareholders",
+        "Pass-through taxation (avoids double taxation)",
+        "Potential tax savings on self-employment taxes",
+        "Separate legal entity with perpetual existence"
+      ],
+      "disadvantages": [
+        "Ownership restrictions (100 or fewer shareholders, only U.S. citizens/residents, etc.)",
+        "One class of stock allowed",
+        "More formalities than an LLC",
+        "All states may not recognize S corporation status"
+      ],
+      "taxation": {
+        "default": "Pass-through taxation to shareholders",
+        "special_rules": "Reasonable salary requirements for shareholder-employees"
+      },
+      "management": {
+        "structure": "Same as C Corporation: Board of Directors, Officers, and Shareholders"
+      },
+      "common_forms": {
+        "formation": "Articles of Incorporation (same as C Corporation)",
+        "s_election": "Form 2553 (filed with IRS)"
+      }
+    },
+    "partnership": {
+      "name": "Partnership",
+      "description": "A business relationship where two or more people share ownership and operate the business together for profit.",
+      "types": {
+        "general_partnership": {
+          "name": "General Partnership (GP)",
+          "description": "Basic partnership where all partners share responsibility and liability.",
+          "liability": "Unlimited personal liability for all partners"
+        },
+        "limited_partnership": {
+          "name": "Limited Partnership (LP)",
+          "description": "Partnership with at least one general partner (with unlimited liability) and one or more limited partners (with limited liability).",
+          "liability": "General partners have unlimited liability; limited partners have liability limited to their investment"
+        },
+        "limited_liability_partnership": {
+          "name": "Limited Liability Partnership (LLP)",
+          "description": "Partnership where all partners have limited liability protection.",
+          "liability": "Partners are protected from personal liability for partnership debts and other partners' actions",
+          "common_uses": "Professional services (law firms, accounting firms, etc.)"
+        }
+      },
+      "advantages": [
+        "Easy and inexpensive to form",
+        "Pass-through taxation",
+        "Flexible management and profit-sharing",
+        "Limited regulatory requirements"
+      ],
+      "disadvantages": [
+        "Unlimited liability for general partners",
+        "Limited life (can terminate upon partner departure)",
+        "Potential for partner disputes",
+        "Difficulty raising capital"
+      ],
+      "taxation": {
+        "default": "Pass-through to partners' personal tax returns"
+      },
+      "common_forms": {
+        "formation": "Partnership Agreement (typically not filed with state)",
+        "registration": "Certificate of Limited Partnership (for LPs)"
+      }
+    },
+    "sole_proprietorship": {
+      "name": "Sole Proprietorship",
+      "description": "The simplest business structure where one individual owns and operates the business.",
+      "advantages": [
+        "Easiest and least expensive to form",
+        "Complete control by owner",
+        "Simple tax reporting on personal return",
+        "Minimal legal requirements",
+        "Easy to dissolve"
+      ],
+      "disadvantages": [
+        "Unlimited personal liability",
+        "Difficult to raise capital",
+        "Limited life (tied to owner's life/involvement)",
+        "Self-employment taxes"
+      ],
+      "taxation": {
+        "default": "Reported on owner's personal tax return (Schedule C)"
+      },
+      "common_forms": {
+        "registration": "Business License (local)",
+        "dba_filing": "Fictitious Business Name Statement / DBA (if operating under a name different from owner's legal name)"
+      }
+    }
+  },
+  "choosing_factors": {
+    "liability_protection": {
+      "description": "Protection of personal assets from business debts and legal claims",
+      "rankings": {
+        "best": ["LLC", "Corporation", "LLP"],
+        "moderate": ["LP (for limited partners)"],
+        "none": ["Sole Proprietorship", "General Partnership (for general partners)"]
+      }
+    },
+    "tax_considerations": {
+      "description": "How business profits and losses are taxed",
+      "options": {
+        "pass_through": ["Sole Proprietorship", "Partnership", "LLC", "S Corporation"],
+        "double_taxation": ["C Corporation"],
+        "flexible": ["LLC (can choose tax treatment)"]
+      }
+    },
+    "ease_of_formation": {
+      "description": "Complexity and cost of creating the business entity",
+      "rankings": {
+        "easiest": ["Sole Proprietorship"],
+        "moderate": ["General Partnership", "LLC"],
+        "more_complex": ["LP", "LLP", "Corporation"]
+      }
+    },
+    "ongoing_requirements": {
+      "description": "Compliance obligations after formation",
+      "rankings": {
+        "minimal": ["Sole Proprietorship", "General Partnership"],
+        "moderate": ["LLC"],
+        "extensive": ["Corporation", "S Corporation"]
+      }
+    },
+    "raising_capital": {
+      "description": "Ability to attract investment and funding",
+      "rankings": {
+        "best": ["C Corporation"],
+        "good": ["S Corporation (with limitations)", "LLC"],
+        "limited": ["LP"],
+        "difficult": ["Sole Proprietorship", "General Partnership"]
+      }
+    }
+  }
+}

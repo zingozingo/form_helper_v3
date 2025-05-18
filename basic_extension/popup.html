@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Business Registration Assistant</title>
+  <style>
+    /* Basic reset and defaults */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: Arial, sans-serif;
+      width: 320px;
+      padding: 0;
+      margin: 0;
+      color: #333;
+      background-color: #f5f7fa;
+    }
+    
+    /* Header */
+    .header {
+      background-color: #2e5cb8;
+      color: white;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    }
+    
+    .header h1 {
+      font-size: 16px;
+      margin-bottom: 8px;
+    }
+    
+    .detection-status {
+      display: flex;
+      align-items: center;
+      font-size: 14px;
+    }
+    
+    .status-indicator {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 8px;
+      background-color: #ccc;
+    }
+    
+    .status-indicator.active {
+      background-color: #4CAF50;
+      box-shadow: 0 0 0 rgba(76, 175, 80, 0.4);
+      animation: pulse 2s infinite;
+    }
+    
+    .status-indicator.warning {
+      background-color: #FFC107;
+    }
+    
+    @keyframes pulse {
+      0% {
+        box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.4);
+      }
+      70% {
+        box-shadow: 0 0 0 6px rgba(76, 175, 80, 0);
+      }
+      100% {
+        box-shadow: 0 0 0 0 rgba(76, 175, 80, 0);
+      }
+    }
+    
+    /* Content area */
+    .container {
+      padding: 16px;
+    }
+    
+    /* Views */
+    .view {
+      display: none;
+    }
+    
+    .view.active {
+      display: block;
+    }
+    
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 20px 0;
+      color: #666;
+    }
+    
+    .empty-state p {
+      margin-bottom: 16px;
+    }
+    
+    /* Detection details */
+    .card {
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    
+    .card-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #2e5cb8;
+    }
+    
+    .info-row {
+      display: flex;
+      margin-bottom: 10px;
+      align-items: center;
+    }
+    
+    .info-label {
+      font-weight: 600;
+      width: 100px;
+      color: #666;
+    }
+    
+    .confidence-meter {
+      background-color: #f0f0f0;
+      height: 12px;
+      border-radius: 6px;
+      overflow: hidden;
+      flex-grow: 1;
+      margin-top: 3px;
+    }
+    
+    .confidence-bar {
+      height: 100%;
+      background-color: #4CAF50;
+      width: 0%;
+      transition: width 0.5s ease;
+    }
+    
+    /* Buttons */
+    .button {
+      display: block;
+      width: 100%;
+      padding: 10px 0;
+      background-color: #2e5cb8;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 600;
+      text-align: center;
+      margin-bottom: 10px;
+      transition: background-color 0.2s;
+    }
+    
+    .button:hover {
+      background-color: #1c4ca9;
+    }
+    
+    .button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    
+    .button-secondary {
+      background-color: transparent;
+      border: 1px solid #2e5cb8;
+      color: #2e5cb8;
+    }
+    
+    .button-secondary:hover {
+      background-color: #f0f4ff;
+    }
+    
+    /* Help section */
+    .help-section {
+      margin-top: 16px;
+      font-size: 13px;
+    }
+    
+    .help-section h3 {
+      font-size: 14px;
+      margin-bottom: 8px;
+      color: #2e5cb8;
+    }
+    
+    .help-section p {
+      margin-bottom: 8px;
+      line-height: 1.4;
+    }
+    
+    /* Footer */
+    .footer {
+      padding: 12px 16px;
+      text-align: center;
+      font-size: 12px;
+      color: #666;
+      border-top: 1px solid #eee;
+      background-color: white;
+    }
+    
+    .footer a {
+      color: #2e5cb8;
+      text-decoration: none;
+    }
+    
+    /* Debug info */
+    .debug-panel {
+      margin-top: 16px;
+      display: none;
+      font-family: monospace;
+      font-size: 11px;
+      background-color: #f5f5f5;
+      padding: 8px;
+      border-radius: 4px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    
+    .debug-panel.visible {
+      display: block;
+    }
+    
+    .debug-toggle {
+      font-size: 12px;
+      text-align: center;
+      color: #666;
+      margin-top: 10px;
+      cursor: pointer;
+    }
+    
+    .debug-toggle:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Business Registration Assistant</h1>
+    <div class="detection-status">
+      <span id="status-indicator" class="status-indicator"></span>
+      <span id="status-text">Detecting...</span>
+    </div>
+  </div>
+  
+  <div class="container">
+    <!-- No detection view -->
+    <div id="no-detection-view" class="view">
+      <div class="empty-state">
+        <p>No business registration form detected on this page.</p>
+        <p>Please navigate to a business registration form to use this assistant.</p>
+      </div>
+      <button id="check-again-btn" class="button">Check Again</button>
+    </div>
+    
+    <!-- Detection view -->
+    <div id="detection-view" class="view">
+      <div class="card">
+        <div class="card-title">Form Detection</div>
+        <div class="info-row">
+          <div class="info-label">State:</div>
+          <div id="detected-state">Unknown</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Confidence:</div>
+          <div style="flex-grow: 1;">
+            <div class="confidence-meter">
+              <div id="confidence-bar" class="confidence-bar"></div>
+            </div>
+            <div style="text-align: right; font-size: 12px; margin-top: 4px;">
+              <span id="confidence-value">0%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="card">
+        <div class="card-title">Form Assistance</div>
+        <button id="field-help-btn" class="button">Get Field Descriptions</button>
+        <button id="requirements-btn" class="button button-secondary">State-Specific Requirements</button>
+      </div>
+      
+      <div class="help-section">
+        <h3>Help & Information</h3>
+        <p>This assistant helps you identify and complete business registration forms.</p>
+        <p>When a business registration form is detected, it will provide information about required fields and submission requirements.</p>
+      </div>
+      
+      <div class="debug-toggle" id="debug-toggle">
+        Show Debug Information
+      </div>
+      
+      <div class="debug-panel" id="debug-panel">
+        <div id="debug-content">No debug information available.</div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="footer">
+    Business Registration Assistant v0.1
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>

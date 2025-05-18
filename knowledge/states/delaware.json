@@ -1,0 +1,100 @@
+{
+  "state_code": "DE",
+  "state_name": "Delaware",
+  "business_registration": {
+    "governing_agency": "Delaware Division of Corporations",
+    "website": "https://corp.delaware.gov/",
+    "urls": {
+      "main": "https://corp.delaware.gov/",
+      "llc_formation": "https://corp.delaware.gov/llcform/",
+      "corporation_formation": "https://corp.delaware.gov/corpform/",
+      "online_filing": "https://icis.corp.delaware.gov/Ecorp/EntitySearch/NameSearch.aspx"
+    },
+    "forms": {
+      "llc": {
+        "main_form": "Certificate of Formation",
+        "filing_fee": 90,
+        "processing_time": "Standard: 10-15 business days, Expedited: Same day, 24-hour, or 2-hour service available for additional fees",
+        "annual_filing": "Annual Franchise Tax Report - Due by June 1",
+        "annual_fee": "Minimum $300 annual franchise tax"
+      },
+      "corporation": {
+        "main_form": "Certificate of Incorporation",
+        "filing_fee": 89,
+        "processing_time": "Standard: 10-15 business days, Expedited: Same day, 24-hour, or 2-hour service available for additional fees",
+        "annual_filing": "Annual Franchise Tax Report - Due by March 1",
+        "annual_fee": "Minimum $175 annual franchise tax based on authorized shares"
+      },
+      "partnership": {
+        "main_form": "Certificate of Limited Partnership",
+        "filing_fee": 200,
+        "processing_time": "Standard: 10-15 business days, Expedited: Same day, 24-hour, or 2-hour service available for additional fees",
+        "annual_filing": "Annual Franchise Tax Report - Due by June 1",
+        "annual_fee": 300
+      }
+    },
+    "requirements": {
+      "registered_agent": {
+        "required": true,
+        "description": "All entities must designate a registered agent with a physical Delaware address."
+      },
+      "publication": {
+        "required": false,
+        "description": "No publication requirement in Delaware."
+      },
+      "naming_conventions": {
+        "llc": {
+          "required_terms": ["LLC", "L.L.C.", "Limited Liability Company"],
+          "prohibited_terms": ["Bank", "Trust", "University", "College", "Insurance"]
+        },
+        "corporation": {
+          "required_terms": ["Association", "Company", "Corporation", "Club", "Foundation", "Fund", "Incorporated", "Institute", "Society", "Union", "Syndicate", "Limited", "Inc.", "Corp."],
+          "prohibited_terms": ["Bank", "Trust", "University", "College", "Insurance"]
+        }
+      }
+    },
+    "additional_filings": {
+      "business_license": {
+        "required": true,
+        "description": "State business license required for all businesses operating in Delaware.",
+        "authority": "Delaware Division of Revenue"
+      },
+      "employer_requirements": {
+        "ein": {
+          "required": true,
+          "description": "Federal Employer Identification Number required for all entities except sole proprietorships with no employees.",
+          "authority": "Internal Revenue Service"
+        },
+        "delaware_withholding": {
+          "required": "Conditional",
+          "description": "Registration for withholding required if hiring employees.",
+          "authority": "Delaware Division of Revenue"
+        }
+      }
+    }
+  },
+  "form_field_guidance": {
+    "common_fields": {
+      "entity_name": {
+        "description": "The official name of your business entity.",
+        "tips": "Must include required designation (LLC, Inc., etc.). Check availability on DE Division of Corporations website before filing."
+      },
+      "business_purpose": {
+        "description": "Statement of what the business will do.",
+        "tips": "Can be general (e.g., 'any lawful act or activity for which corporations may be organized')."
+      },
+      "registered_agent": {
+        "description": "Person or entity designated to receive legal documents.",
+        "tips": "Must have a physical DE address. Most businesses use a registered agent service since they don't have a physical presence in Delaware."
+      },
+      "authorized_shares": {
+        "description": "For corporations, the number of shares the company is authorized to issue.",
+        "tips": "Affects annual franchise tax. Consider using the minimum (1,500 for minimum tax) unless you have specific capitalization needs."
+      },
+      "par_value": {
+        "description": "The nominal or face value of a share.",
+        "tips": "Can be any value or 'no par'. Lower par values often result in lower franchise taxes."
+      }
+    }
+  }
+}
