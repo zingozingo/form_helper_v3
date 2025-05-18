@@ -1,6 +1,6 @@
 /**
  * Business Registration Assistant - Background Script
- * Simple implementation that manages detection results
+ * Implementation that manages detection results and handles panel
  */
 
 // Store detection results by tab ID
@@ -20,6 +20,11 @@ function updateBadge(tabId, isDetected, confidenceScore = 0) {
     console.error('[BRA] Badge update error:', error);
   }
 }
+
+// Set up the side panel
+chrome.sidePanel
+  .setPanelBehavior({ openPanelOnActionClick: true })
+  .catch((error) => console.error('[BRA] Error setting panel behavior:', error));
 
 // Message handler for communications
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -41,7 +46,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log('[BRA] Stored detection for tab', tabId);
   }
   
-  // Send detection result to popup
+  // Send detection result to popup or panel
   if (message.action === 'getDetectionResult') {
     const requestedTabId = message.tabId || tabId;
     
