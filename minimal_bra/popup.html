@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Business Registration Assistant</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Business Registration Assistant</h1>
+      <div class="status">
+        <span id="status-indicator"></span>
+        <span id="status-text">Checking...</span>
+      </div>
+    </header>
+    
+    <div id="no-detection" class="view">
+      <p>No business registration form detected on this page.</p>
+      <button id="check-again">Check Again</button>
+    </div>
+    
+    <div id="detection" class="view hidden">
+      <div class="info-card">
+        <div class="info-row">
+          <span class="label">State:</span>
+          <span id="state-value">--</span>
+        </div>
+        <div class="info-row">
+          <span class="label">Confidence:</span>
+          <div class="meter">
+            <div id="confidence-bar"></div>
+          </div>
+          <span id="confidence-value">0%</span>
+        </div>
+      </div>
+      
+      <div class="info-card">
+        <h2>Form Assistance</h2>
+        <button class="action-button">Auto-Fill Common Fields</button>
+        <button class="action-button">Get Field Explanations</button>
+        <button class="action-button">State Requirements</button>
+      </div>
+    </div>
+    
+    <footer>
+      <div>Business Registration Assistant v0.1</div>
+    </footer>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
