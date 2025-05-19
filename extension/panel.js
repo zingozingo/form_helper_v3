@@ -3,6 +3,10 @@
  * Implementation for sidebar panel UI with chat functionality
  */
 
+// DOM elements - Navigation
+const endeavorsButton = document.getElementById('endeavors-button');
+const userButton = document.getElementById('user-button');
+
 // DOM elements - Detection
 const statusIndicator = document.getElementById('status-indicator');
 const statusText = document.getElementById('status-text');
@@ -64,6 +68,17 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Process the message and respond
     processUserMessage(message);
+  });
+  
+  // Set up navigation buttons
+  endeavorsButton.addEventListener('click', function() {
+    console.log('[BRA] My Endeavors button clicked');
+    // Currently just a placeholder - no functionality yet
+  });
+  
+  userButton.addEventListener('click', function() {
+    console.log('[BRA] User button clicked');
+    // Currently just a placeholder - no functionality yet
   });
 });
 

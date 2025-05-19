@@ -20,17 +20,47 @@ body {
   height: 100%;
 }
 
-/* Header */
+/* User Navigation Header */
+.user-nav-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #f5f7fa;
+  border-bottom: 1px solid #e0e0e0;
+  padding: 6px 12px;
+  flex-shrink: 0;
+  height: 36px;
+}
+
+.nav-button {
+  background-color: transparent;
+  color: #555;
+  border: none;
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.nav-button:hover {
+  background-color: #e8e8e8;
+  color: #333;
+}
+
+.user-button {
+  font-weight: bold;
+  color: #2e5cb8;
+}
+
+/* Main Header */
 header {
   background-color: #2e5cb8;
   color: white;
-  padding: 12px;
+  padding: 8px 12px;
   flex-shrink: 0;
-}
-
-h1 {
-  font-size: 16px;
-  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .status {
