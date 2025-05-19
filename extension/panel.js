@@ -1,9 +1,9 @@
 /**
  * Business Registration Assistant - Panel Script
- * Implementation for sidebar panel UI
+ * Implementation for sidebar panel UI with chat functionality
  */
 
-// DOM elements
+// DOM elements - Detection
 const statusIndicator = document.getElementById('status-indicator');
 const statusText = document.getElementById('status-text');
 const noDetectionView = document.getElementById('no-detection');
@@ -12,6 +12,11 @@ const stateValue = document.getElementById('state-value');
 const confidenceBar = document.getElementById('confidence-bar');
 const confidenceValue = document.getElementById('confidence-value');
 const checkAgainButton = document.getElementById('check-again');
+
+// DOM elements - Chat
+const chatForm = document.getElementById('chat-form');
+const chatInput = document.getElementById('chat-input');
+const chatMessages = document.getElementById('chat-messages');
 
 // Initialize when panel opens
 document.addEventListener('DOMContentLoaded', function() {
@@ -42,6 +47,23 @@ document.addEventListener('DOMContentLoaded', function() {
         });
       }
     });
+  });
+  
+  // Set up chat form submission
+  chatForm.addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const message = chatInput.value.trim();
+    if (!message) return;
+    
+    // Add user message to chat
+    addChatMessage(message, 'user');
+    
+    // Clear input
+    chatInput.value = '';
+    
+    // Process the message and respond
+    processUserMessage(message);
   });
 });
 
@@ -132,4 +154,48 @@ function getStateName(code) {
   };
   
   return states[code] || code;
+}
+
+// Chat Functions
+
+// Add a message to the chat
+function addChatMessage(text, type) {
+  const messageDiv = document.createElement('div');
+  messageDiv.classList.add('message', type);
+  messageDiv.textContent = text;
+  
+  chatMessages.appendChild(messageDiv);
+  
+  // Scroll to bottom
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// Process user message and generate response
+function processUserMessage(message) {
+  // Simple response logic for now
+  setTimeout(() => {
+    let response;
+    
+    // Basic keyword matching
+    if (message.toLowerCase().includes('help')) {
+      response = "I can help you with business registration questions. What specifically would you like to know?";
+    } 
+    else if (message.toLowerCase().includes('llc')) {
+      response = "An LLC (Limited Liability Company) is a business structure that combines pass-through taxation with limited liability protection.";
+    }
+    else if (message.toLowerCase().includes('corporation')) {
+      response = "A corporation is a legal entity that is separate and distinct from its owners, offering limited liability protection but with more complex taxation.";
+    }
+    else if (message.toLowerCase().includes('cost') || message.toLowerCase().includes('fee')) {
+      response = "Registration fees vary by state and business type. The base filing fee can range from $40 to $500, with additional fees for expedited processing.";
+    }
+    else if (message.toLowerCase().includes('time') || message.toLowerCase().includes('long')) {
+      response = "Processing times vary by state. Standard processing typically takes 5-10 business days, while expedited options may be available for an additional fee.";
+    }
+    else {
+      response = "I'm a simple assistant at the moment. Try asking about LLCs, corporations, registration fees, or processing times.";
+    }
+    
+    addChatMessage(response, 'system');
+  }, 600);
 }
