@@ -1,6 +1,6 @@
 /**
  * Business Registration Assistant - Background Script
- * Simple implementation that manages detection results
+ * Implementation that manages detection results and handles panel
  */
 
 // Store detection results by tab ID
@@ -19,6 +19,13 @@ function updateBadge(tabId, isDetected, confidenceScore = 0) {
   } catch (error) {
     console.error('[BRA] Badge update error:', error);
   }
+}
+
+// Set up the side panel
+if (chrome.sidePanel) {
+  chrome.sidePanel
+    .setPanelBehavior({ openPanelOnActionClick: true })
+    .catch((error) => console.error('[BRA] Error setting panel behavior:', error));
 }
 
 // Message handler for communications
@@ -41,7 +48,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log('[BRA] Stored detection for tab', tabId);
   }
   
-  // Send detection result to popup
+  // Send detection result to popup or panel
   if (message.action === 'getDetectionResult') {
     const requestedTabId = message.tabId || tabId;
     
@@ -67,5 +74,20 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   if (detectionResults[tabId]) {
     delete detectionResults[tabId];
     console.log('[BRA] Removed data for closed tab', tabId);
+  }
+});
+
+// Listen for tab updates to refresh detection when URL changes
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  // Only act if URL has changed and it's complete
+  if (changeInfo.status === 'complete' && changeInfo.url) {
+    console.log('[BRA] Tab updated with new URL, will reset detection');
+    // Clear previous detection for this tab
+    if (detectionResults[tabId]) {
+      delete detectionResults[tabId];
+    }
+    
+    // Reset badge
+    updateBadge(tabId, false, 0);
   }
 });
