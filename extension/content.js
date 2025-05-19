@@ -1,7 +1,10 @@
 /**
  * Business Registration Assistant - Content Script
- * Simple implementation that detects business registration forms
+ * Implementation that detects business registration forms
  */
+
+// Import URL detector module
+import URLDetector from './modules/urlDetector.js';
 
 // Global variables
 let detectionResult = null;
@@ -34,7 +37,11 @@ function detectBusinessForm() {
     const currentUrl = window.location.href;
     
     // Analyze different aspects of the page
-    const urlScore = analyzeUrl(currentUrl);
+    // Use the new URL detector module for URL analysis
+    const urlAnalysis = URLDetector.analyzeUrl(currentUrl);
+    const urlScore = urlAnalysis.score;
+    
+    // Continue with other analyses
     const contentScore = analyzePageContent();
     const formScore = analyzeFormElements();
     
@@ -45,16 +52,20 @@ function detectBusinessForm() {
     // Check if it's a business form
     const isBusinessForm = confidenceScore >= 60;
     
+    // Get state from URL detector
+    const state = URLDetector.identifyStateFromUrl(currentUrl) || identifyStateFromContent();
+    
     // Create detection result
     detectionResult = {
       isBusinessRegistrationForm: isBusinessForm,
       confidenceScore: confidenceScore,
-      state: identifyState(),
+      state: state,
       url: currentUrl,
       details: {
         urlScore,
         contentScore,
-        formScore
+        formScore,
+        urlAnalysisReasons: urlAnalysis.reasons
       }
     };
     
@@ -68,39 +79,6 @@ function detectBusinessForm() {
     
   } catch (error) {
     console.error('Error detecting form:', error);
-  }
-}
-
-/**
- * Analyze URL for business registration patterns
- */
-function analyzeUrl(url) {
-  try {
-    let score = 0;
-    const lowerUrl = url.toLowerCase();
-    
-    // Check for government domains
-    if (lowerUrl.includes('.gov')) {
-      score += 25;
-    }
-    
-    // Check for business-related terms
-    const terms = [
-      'business', 'register', 'registration', 'license',
-      'permit', 'corporation', 'llc', 'entity'
-    ];
-    
-    for (const term of terms) {
-      if (lowerUrl.includes(term)) {
-        score += 5;
-        if (score >= 70) break;
-      }
-    }
-    
-    return Math.min(score, 100);
-  } catch (error) {
-    console.error('URL analysis error:', error);
-    return 0;
   }
 }
 
@@ -119,7 +97,13 @@ function analyzePageContent() {
       'llc', 'limited liability company',
       'corporation', 'incorporated',
       'partnership', 'sole proprietorship', 
-      'doing business as'
+      'doing business as', 'dba',
+      'entity', 'foreign entity',
+      'nonprofit', 'benefit corporation',
+      'public benefit corporation', 'pbc',
+      'articles of organization', 'articles of incorporation',
+      'operating agreement', 'business filing',
+      'business entity', 'formation document'
     ];
     
     for (const term of entityTerms) {
@@ -132,7 +116,12 @@ function analyzePageContent() {
     const registrationTerms = [
       'business registration', 'register a business',
       'business license', 'articles of organization',
-      'articles of incorporation', 'business formation'
+      'articles of incorporation', 'business formation',
+      'file a', 'certificate of formation',
+      'certificate of organization', 'fictitious name',
+      'trade name', 'assumed name',
+      'register your', 'new business',
+      'start a business', 'filing fee'
     ];
     
     for (const term of registrationTerms) {
@@ -140,6 +129,21 @@ function analyzePageContent() {
         score += 10;
       }
     }
+    
+    // Check for common registration-related heading text
+    const headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
+    headings.forEach(heading => {
+      const headingText = heading.textContent.toLowerCase();
+      if (headingText.includes('register') && 
+          (headingText.includes('business') || headingText.includes('entity'))) {
+        score += 15;
+      }
+      
+      if (headingText.includes('form') && 
+          (headingText.includes('llc') || headingText.includes('corporation'))) {
+        score += 15;
+      }
+    });
     
     return Math.min(score, 100);
   } catch (error) {
@@ -171,7 +175,12 @@ function analyzeFormElements() {
     const allFields = document.querySelectorAll('input, select, textarea');
     const fieldPatterns = [
       'business', 'company', 'entity', 'name',
-      'type', 'owner', 'address', 'register'
+      'type', 'owner', 'address', 'register',
+      'entity', 'formation', 'filing', 'incorporate',
+      'articles', 'organization', 'certificate',
+      'agent', 'registered', 'principal', 'office',
+      'domestic', 'foreign', 'signature', 'fee',
+      'payment', 'ein', 'tax', 'id', 'federal'
     ];
     
     let matchedFields = 0;
@@ -180,9 +189,11 @@ function analyzeFormElements() {
       const name = field.name ? field.name.toLowerCase() : '';
       const id = field.id ? field.id.toLowerCase() : '';
       const placeholder = field.placeholder ? field.placeholder.toLowerCase() : '';
+      const label = field.labels && field.labels[0] ? field.labels[0].textContent.toLowerCase() : '';
       
       for (const pattern of fieldPatterns) {
-        if (name.includes(pattern) || id.includes(pattern) || placeholder.includes(pattern)) {
+        if (name.includes(pattern) || id.includes(pattern) || 
+            placeholder.includes(pattern) || label.includes(pattern)) {
           matchedFields++;
           break;
         }
@@ -193,6 +204,23 @@ function analyzeFormElements() {
     if (matchedFields >= 3) score += 20;
     if (matchedFields >= 5) score += 20;
     
+    // Check for labels related to business registration
+    const labels = document.querySelectorAll('label');
+    const labelTerms = ['business name', 'entity type', 'registered agent', 'principal address'];
+    let labelMatches = 0;
+    
+    labels.forEach(label => {
+      const labelText = label.textContent.toLowerCase();
+      for (const term of labelTerms) {
+        if (labelText.includes(term)) {
+          labelMatches++;
+          break;
+        }
+      }
+    });
+    
+    if (labelMatches >= 2) score += 15;
+    
     return Math.min(score, 100);
   } catch (error) {
     console.error('Form elements analysis error:', error);
@@ -201,19 +229,59 @@ function analyzeFormElements() {
 }
 
 /**
- * Identify which state the form is for
+ * Identify which state the form is for based on page content
  */
-function identifyState() {
+function identifyStateFromContent() {
   try {
-    const url = window.location.href.toLowerCase();
+    // Get page text
+    const pageText = document.body.textContent.toLowerCase();
     
-    // Simple URL-based state detection
-    if (url.includes('.ca.gov') || url.includes('california')) return 'CA';
-    if (url.includes('.ny.gov') || url.includes('newyork') || url.includes('new-york')) return 'NY';
-    if (url.includes('.tx.gov') || url.includes('texas')) return 'TX';
-    if (url.includes('.fl.gov') || url.includes('florida')) return 'FL';
-    if (url.includes('.de.gov') || url.includes('delaware')) return 'DE';
-    if (url.includes('.dc.gov') || url.includes('district of columbia')) return 'DC';
+    // Map of state names and their codes
+    const states = {
+      'alabama': 'AL', 'alaska': 'AK', 'arizona': 'AZ', 'arkansas': 'AR',
+      'california': 'CA', 'colorado': 'CO', 'connecticut': 'CT', 'delaware': 'DE',
+      'florida': 'FL', 'georgia': 'GA', 'hawaii': 'HI', 'idaho': 'ID',
+      'illinois': 'IL', 'indiana': 'IN', 'iowa': 'IA', 'kansas': 'KS',
+      'kentucky': 'KY', 'louisiana': 'LA', 'maine': 'ME', 'maryland': 'MD',
+      'massachusetts': 'MA', 'michigan': 'MI', 'minnesota': 'MN', 'mississippi': 'MS',
+      'missouri': 'MO', 'montana': 'MT', 'nebraska': 'NE', 'nevada': 'NV',
+      'new hampshire': 'NH', 'new jersey': 'NJ', 'new mexico': 'NM', 'new york': 'NY',
+      'north carolina': 'NC', 'north dakota': 'ND', 'ohio': 'OH', 'oklahoma': 'OK',
+      'oregon': 'OR', 'pennsylvania': 'PA', 'rhode island': 'RI', 'south carolina': 'SC',
+      'south dakota': 'SD', 'tennessee': 'TN', 'texas': 'TX', 'utah': 'UT',
+      'vermont': 'VT', 'virginia': 'VA', 'washington': 'WA', 'west virginia': 'WV',
+      'wisconsin': 'WI', 'wyoming': 'WY', 'district of columbia': 'DC'
+    };
+    
+    // Look for state name mentions in headings first (more likely to be relevant)
+    const headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
+    for (const heading of headings) {
+      const headingText = heading.textContent.toLowerCase();
+      for (const [stateName, stateCode] of Object.entries(states)) {
+        if (headingText.includes(stateName) || 
+            (stateCode.length === 2 && headingText.includes(` ${stateCode.toLowerCase()} `))) {
+          return stateCode;
+        }
+      }
+    }
+    
+    // Check for state mentions in the context of business registration
+    const businessPhrases = ['business registration', 'register a business', 'secretary of state', 'department of state'];
+    
+    for (const [stateName, stateCode] of Object.entries(states)) {
+      // Look for state name in combination with business registration phrases
+      for (const phrase of businessPhrases) {
+        if (pageText.includes(`${stateName} ${phrase}`) || 
+            pageText.includes(`${phrase} ${stateName}`)) {
+          return stateCode;
+        }
+      }
+      
+      // Look for phrases like "State of California"
+      if (pageText.includes(`state of ${stateName}`)) {
+        return stateCode;
+      }
+    }
     
     return null;
   } catch (error) {
@@ -222,7 +290,7 @@ function identifyState() {
   }
 }
 
-// Listen for messages from popup
+// Listen for messages from popup or panel
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   log('Message received:', message.action);
   
