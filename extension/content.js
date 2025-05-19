@@ -4,10 +4,16 @@
  */
 
 // Import URL detector module
-import URLDetector from './modules/urlDetector.js';
+let URLDetector;
+(async () => {
+  URLDetector = await import(chrome.runtime.getURL('modules/urlDetector.js'));
+})();
 
 // Global variables
 let detectionResult = null;
+let detectionAttempts = 0;
+const MAX_DETECTION_ATTEMPTS = 3;
+const RETRY_DELAY = 2000; // ms
 
 // Simple logger
 function log(message, data) {
@@ -19,26 +25,164 @@ function log(message, data) {
   }
 }
 
-// Initialize when page loads
-window.addEventListener('DOMContentLoaded', () => {
-  log('Content script loaded');
-  // Wait for the page to fully load
-  setTimeout(detectBusinessForm, 1000);
-});
+/**
+ * Reports an error to the background script
+ * @param {Error} error - The error that occurred
+ * @param {string} context - Context where the error occurred
+ * @param {boolean} isFatal - Whether the error is fatal and should be shown to the user
+ */
+function reportError(error, context, isFatal = false) {
+  console.error(`[BRA] Error in ${context}:`, error);
+  
+  try {
+    chrome.runtime.sendMessage({
+      action: 'detectionError',
+      error: {
+        message: error.message,
+        stack: error.stack,
+        context: context,
+        isFatal: isFatal,
+        timestamp: new Date().toISOString(),
+        url: window.location.href
+      }
+    });
+  } catch (e) {
+    // If we can't report the error, log it locally
+    console.error('[BRA] Failed to report error:', e);
+  }
+}
+
+/**
+ * Initialize detection with multiple loading strategies
+ */
+function initializeDetection() {
+  log('Initializing content script with improved loading strategy');
+  
+  // Wait a bit to ensure the module is loaded
+  setTimeout(() => {
+    // Strategy 1: Try at document_end (set in manifest)
+    tryDetection();
+    
+    // Strategy 2: Wait for load event
+    if (document.readyState === 'complete') {
+      tryDetection();
+    } else {
+      window.addEventListener('load', () => {
+        log('Window load event fired');
+        tryDetection();
+      });
+    }
+    
+    // Strategy 3: Delayed execution for slow-loading pages
+    setTimeout(() => {
+      log('Delayed execution triggered');
+      tryDetection();
+    }, 2500);
+    
+    // Strategy 4: MutationObserver for dynamically loaded content
+    setupMutationObserver();
+  }, 100);
+}
+
+/**
+ * Sets up a MutationObserver to detect dynamic content changes
+ */
+function setupMutationObserver() {
+  // Observe DOM changes for dynamic content loading
+  const observer = new MutationObserver((mutations) => {
+    // Look for significant DOM changes that might indicate form loading
+    const significantChanges = mutations.some(mutation => 
+      mutation.addedNodes.length > 0 && 
+      Array.from(mutation.addedNodes).some(node => 
+        node.nodeType === Node.ELEMENT_NODE && 
+        (node.tagName === 'FORM' || 
+         node.querySelector('form, input, select, textarea')))
+    );
+    
+    if (significantChanges) {
+      log('Significant DOM changes detected, triggering detection');
+      tryDetection();
+      
+      // After a certain amount of time, disconnect the observer
+      if (detectionResult || detectionAttempts >= MAX_DETECTION_ATTEMPTS) {
+        observer.disconnect();
+        log('MutationObserver disconnected after successful detection or max attempts');
+      }
+    }
+  });
+  
+  // Start observing with a configuration
+  observer.observe(document.body || document.documentElement, {
+    childList: true,
+    subtree: true,
+    attributes: false,
+    characterData: false
+  });
+  
+  // Ensure observer is eventually disconnected
+  setTimeout(() => {
+    observer.disconnect();
+    log('MutationObserver disconnected after timeout');
+  }, 30000); // 30 seconds max
+}
+
+/**
+ * Try to detect business forms with retry mechanism
+ */
+async function tryDetection() {
+  // Avoid redundant detections if we already have a result
+  if (detectionResult) {
+    log('Detection already completed, skipping');
+    return;
+  }
+  
+  // Increment attempt counter
+  detectionAttempts++;
+  log(`Detection attempt ${detectionAttempts}/${MAX_DETECTION_ATTEMPTS}`);
+  
+  // Attempt detection
+  try {
+    await detectBusinessForm();
+  } catch (error) {
+    reportError(error, 'tryDetection', detectionAttempts >= MAX_DETECTION_ATTEMPTS);
+    
+    // Retry if we haven't exceeded max attempts
+    if (detectionAttempts < MAX_DETECTION_ATTEMPTS) {
+      log(`Will retry detection in ${RETRY_DELAY}ms`);
+      setTimeout(tryDetection, RETRY_DELAY);
+    } else {
+      log('Maximum detection attempts reached, giving up');
+      // Notify background of failed detection
+      chrome.runtime.sendMessage({
+        action: 'detectionFailed',
+        attempts: detectionAttempts,
+        url: window.location.href
+      }).catch(e => console.error('[BRA] Failed to report detection failure:', e));
+    }
+  }
+}
 
 /**
  * Main detection function
  */
-function detectBusinessForm() {
+async function detectBusinessForm() {
+  log('Starting form detection');
+  
   try {
-    log('Starting form detection');
-    
     // Get current URL
     const currentUrl = window.location.href;
     
+    // Make sure URLDetector is loaded
+    if (!URLDetector) {
+      log('Waiting for URLDetector module to load...');
+      // Wait a bit and try again
+      setTimeout(tryDetection, 500);
+      return;
+    }
+    
     // Analyze different aspects of the page
-    // Use the new URL detector module for URL analysis
-    const urlAnalysis = URLDetector.analyzeUrl(currentUrl);
+    // Use the URL detector module for URL analysis
+    const urlAnalysis = URLDetector.default.analyzeUrl(currentUrl);
     const urlScore = urlAnalysis.score;
     
     // Continue with other analyses
@@ -53,7 +197,7 @@ function detectBusinessForm() {
     const isBusinessForm = confidenceScore >= 60;
     
     // Get state from URL detector
-    const state = URLDetector.identifyStateFromUrl(currentUrl) || identifyStateFromContent();
+    const state = URLDetector.default.identifyStateFromUrl(currentUrl) || identifyStateFromContent();
     
     // Create detection result
     detectionResult = {
@@ -65,20 +209,25 @@ function detectBusinessForm() {
         urlScore,
         contentScore,
         formScore,
-        urlAnalysisReasons: urlAnalysis.reasons
+        urlAnalysisReasons: urlAnalysis.reasons,
+        detectionAttempts: detectionAttempts,
+        timestamp: new Date().toISOString(),
+        documentReady: document.readyState
       }
     };
     
     log('Detection result:', detectionResult);
     
-    // Send to background script
+    // Send to background script with error handling
     chrome.runtime.sendMessage({
       action: 'formDetected',
       result: detectionResult
+    }).catch(error => {
+      reportError(error, 'sendingDetectionResult', true);
     });
-    
   } catch (error) {
-    console.error('Error detecting form:', error);
+    reportError(error, 'detectBusinessForm', detectionAttempts >= MAX_DETECTION_ATTEMPTS);
+    throw error; // Re-throw to trigger retry mechanism
   }
 }
 
@@ -88,6 +237,12 @@ function detectBusinessForm() {
 function analyzePageContent() {
   try {
     let score = 0;
+    
+    // Check if document.body exists
+    if (!document.body) {
+      log('Document body not available yet, returning partial content score');
+      return 0;
+    }
     
     // Get page text
     const pageText = document.body.textContent.toLowerCase();
@@ -147,8 +302,8 @@ function analyzePageContent() {
     
     return Math.min(score, 100);
   } catch (error) {
-    console.error('Content analysis error:', error);
-    return 0;
+    reportError(error, 'analyzePageContent');
+    return 0; // Return 0 score if analysis fails
   }
 }
 
@@ -159,12 +314,18 @@ function analyzeFormElements() {
   try {
     let score = 0;
     
+    // Check if document.body exists
+    if (!document.body) {
+      log('Document body not available yet, returning partial form score');
+      return 0;
+    }
+    
     // Check for forms
     const forms = document.querySelectorAll('form');
     if (forms.length > 0) {
       score += 20;
     } else {
-      // Check for input fields
+      // Check for input fields - some forms might not use <form> tags
       const inputs = document.querySelectorAll('input, select, textarea');
       if (inputs.length >= 3) {
         score += 10;
@@ -223,8 +384,8 @@ function analyzeFormElements() {
     
     return Math.min(score, 100);
   } catch (error) {
-    console.error('Form elements analysis error:', error);
-    return 0;
+    reportError(error, 'analyzeFormElements');
+    return 0; // Return 0 score if analysis fails
   }
 }
 
@@ -234,7 +395,8 @@ function analyzeFormElements() {
 function identifyStateFromContent() {
   try {
     // Get page text
-    const pageText = document.body.textContent.toLowerCase();
+    const pageText = document.body ? document.body.textContent.toLowerCase() : '';
+    if (!pageText) return null;
     
     // Map of state names and their codes
     const states = {
@@ -285,24 +447,49 @@ function identifyStateFromContent() {
     
     return null;
   } catch (error) {
-    console.error('State identification error:', error);
+    reportError(error, 'identifyStateFromContent');
     return null;
   }
 }
 
-// Listen for messages from popup or panel
+// Listen for messages from popup, panel, or background script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   log('Message received:', message.action);
   
-  if (message.action === 'getDetectionResult') {
-    // Return current detection
-    sendResponse(detectionResult || { isBusinessRegistrationForm: false });
-  }
-  else if (message.action === 'triggerDetection') {
-    // Run detection again
-    detectBusinessForm();
-    sendResponse({ success: true });
+  try {
+    if (message.action === 'getDetectionResult') {
+      // Return current detection
+      sendResponse(detectionResult || { 
+        isBusinessRegistrationForm: false, 
+        error: 'No detection result available',
+        attempts: detectionAttempts
+      });
+    }
+    else if (message.action === 'triggerDetection') {
+      // Reset detection state
+      detectionResult = null;
+      detectionAttempts = 0;
+      
+      // Run detection again
+      tryDetection();
+      sendResponse({ success: true, message: 'Detection triggered' });
+    }
+    else if (message.action === 'getDetectionStatus') {
+      // Return current detection status
+      sendResponse({
+        hasResult: !!detectionResult,
+        attempts: detectionAttempts,
+        maxAttempts: MAX_DETECTION_ATTEMPTS,
+        documentReady: document.readyState
+      });
+    }
+  } catch (error) {
+    reportError(error, 'messageHandler');
+    sendResponse({ error: error.message });
   }
   
   return true; // Keep message channel open
 });
+
+// Initialize when the content script loads
+initializeDetection();

@@ -323,11 +323,51 @@ footer {
 
 /* Error message styles */
 .error-container {
-  background-color: #fee;
-  border: 1px solid #f88;
-  color: #800;
+  background-color: #fef1f1;
+  border: 1px solid #f8d7da;
+  color: #721c24;
   padding: 12px;
   margin: 8px;
   border-radius: 4px;
   display: none;
+  font-size: 13px;
+  max-height: 200px;
+  overflow-y: auto;
+  animation: fade-in 0.3s ease-in-out;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.error-container strong {
+  font-weight: bold;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.error-tips {
+  margin-top: 10px;
+  padding: 6px 10px;
+  background-color: #fff9f0;
+  border-left: 3px solid #f0ad4e;
+  border-radius: 2px;
+  font-size: 12px;
+}
+
+.error-tips ul {
+  margin-left: 16px;
+  margin-top: 4px;
+}
+
+.error-tips li {
+  margin-bottom: 4px;
+}
+
+.error-count {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #999;
+  text-align: right;
 }

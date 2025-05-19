@@ -429,4 +429,6 @@ const URLDetector = {
 };
 
 // Export the module
-export default URLDetector;
+export { URLDetector as default };
+export const analyzeUrl = URLDetector.analyzeUrl;
+export const identifyStateFromUrl = URLDetector.identifyStateFromUrl;

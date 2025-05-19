@@ -3,17 +3,73 @@
   "name": "Business Registration Assistant",
   "version": "0.1",
   "description": "Helps identify business registration forms",
-  "permissions": ["storage", "activeTab", "sidePanel"],
+  "permissions": [
+    "storage", 
+    "activeTab", 
+    "sidePanel",
+    "scripting",
+    "notifications"
+  ],
+  "host_permissions": [
+    "*://*.gov/*",
+    "*://*.state.us/*",
+    "*://*.ca.gov/*",
+    "*://*.ny.gov/*",
+    "*://*.tx.gov/*",
+    "*://*.fl.gov/*",
+    "*://*.de.gov/*",
+    "*://mytax.dc.gov/*",
+    "*://*.mytax.dc.gov/*",
+    "*://*.business.ca.gov/*",
+    "*://*.businessexpress.ny.gov/*",
+    "*://*.efile.sunbiz.org/*",
+    "*://*.dos.myflorida.com/*",
+    "*://sos.state.us/*",
+    "*://*.sos.state.us/*",
+    "*://*.tax.gov/*",
+    "*://tax.ny.gov/*", 
+    "*://tax.ca.gov/*",
+    "*://tax.fl.gov/*",
+    "*://tax.dc.gov/*",
+    "*://*.revenue.gov/*",
+    "*://revenue.state.us/*",
+    "*://*.sunbiz.org/*"
+  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": [
+        "*://*.gov/*",
+        "*://*.state.us/*",
+        "*://*.ca.gov/*",
+        "*://*.ny.gov/*",
+        "*://*.tx.gov/*", 
+        "*://*.fl.gov/*",
+        "*://*.de.gov/*",
+        "*://mytax.dc.gov/*",
+        "*://*.mytax.dc.gov/*",
+        "*://*.business.ca.gov/*",
+        "*://*.businessexpress.ny.gov/*",
+        "*://*.efile.sunbiz.org/*",
+        "*://*.dos.myflorida.com/*",
+        "*://sos.state.us/*",
+        "*://*.sos.state.us/*",
+        "*://*.tax.gov/*",
+        "*://tax.ny.gov/*", 
+        "*://tax.ca.gov/*",
+        "*://tax.fl.gov/*",
+        "*://tax.dc.gov/*",
+        "*://*.revenue.gov/*",
+        "*://revenue.state.us/*",
+        "*://*.sunbiz.org/*"
+      ],
       "js": ["content.js"],
-      "run_at": "document_idle",
-      "type": "module"
+      "run_at": "document_end",
+      "type": "module",
+      "all_frames": true
     }
   ],
   "action": {
@@ -33,11 +89,11 @@
     "128": "icons/icon128.png"
   },
   "content_security_policy": {
-    "extension_pages": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'"
+    "extension_pages": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://*.gov"
   },
   "web_accessible_resources": [
     {
-      "resources": ["modules/*.js"],
+      "resources": ["modules/urlDetector.js"],
       "matches": ["<all_urls>"]
     }
   ]
