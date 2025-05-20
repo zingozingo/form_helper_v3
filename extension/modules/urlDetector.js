@@ -28,75 +28,214 @@ const GOVERNMENT_DOMAINS = {
 
 // Business registration-related terms in URLs
 const BUSINESS_URL_TERMS = [
-  'business', 
-  'entity', 
-  'register', 
-  'registration', 
-  'filing', 
-  'incorporate', 
-  'llc', 
-  'corporation',
-  'entities', 
-  'corp', 
-  'license', 
-  'certificate', 
-  'permit',
-  'startup',
-  'new-business',
-  'fictitious-name',
-  'dba',
-  'doing-business-as',
-  'foreign-entity',
-  'annual-report',
-  'formation'
+  // Entity formation terms
+  'business', 'entity', 'register', 'registration', 'filing', 
+  'incorporate', 'incorporation', 'llc', 'corporation', 'entities', 
+  'corp', 'license', 'certificate', 'permit', 'startup',
+  'new-business', 'fictitious-name', 'dba', 'doing-business-as',
+  'foreign-entity', 'annual-report', 'formation',
+  
+  // Additional entity types
+  'partnership', 'limited-partnership', 'lp', 'llp', 'lllp',
+  'sole-proprietor', 'sole-proprietorship', 'pllc', 'professional',
+  'nonprofit', 'not-for-profit', 'benefit-corporation', 'b-corp',
+  'cooperative', 'co-op', 's-corporation', 's-corp', 'c-corporation',
+  'c-corp', 'close-corporation', 'professional-corporation', 'pc',
+  
+  // Tax and regulatory terms
+  'ein', 'employer-identification', 'tax-id', 'tax-registration',
+  'business-tax', 'sales-tax', 'withholding', 'revenue',
+  'unemployment', 'workers-comp', 'workers-compensation',
+  'secretary-of-state', 'department-of-revenue', 'department-of-taxation',
+  
+  // Filing actions
+  'file', 'filing', 'submit', 'submission', 'application',
+  'articles-of', 'articles', 'operating-agreement', 'bylaws', 
+  'amendment', 'reinstatement', 'dissolution', 'withdrawal',
+  
+  // Business operations
+  'business-name', 'trade-name', 'trademark', 'assumed-name',
+  'fictitious-business-name', 'fbm', 'statement-of-information',
+  'annual-report', 'biennial-report', 'initial-report',
+  'renewal', 'business-license', 'business-permit',
+  
+  // Industry-specific registrations
+  'contractor', 'professional-license', 'occupational-license',
+  'special-license', 'business-activities', 'regulated-business'
 ];
 
 // Known business registration websites
 const KNOWN_REGISTRATION_SITES = [
-  // Federal
+  // Federal sites
   'irs.gov/businesses',
+  'irs.gov/ein',
   'business.usa.gov',
   'sba.gov',
   'sec.gov/edgar',
+  'uspto.gov/trademarks',
+  'sam.gov/entity-registration',
+  'pay.gov/public/form',
   
   // State secretary websites
   'sos.ca.gov/business',
+  'businesssearch.sos.ca.gov',
+  'bizfile.sos.ca.gov',
   'sos.delaware.gov',
+  'businessfilings.delaware.gov',
   'dos.ny.gov/corporations',
-  'sos.state.tx.us/corp',
-  'bizfile.sos.ga.gov',
-  'sunbiz.org', // Florida
   'businessexpress.ny.gov',
+  'apps.dos.ny.gov/corps',
+  'sos.state.tx.us/corp',
+  'comptroller.texas.gov/taxes/permit',
+  'cpa.texas.gov/taxinfo',
+  'bizfile.sos.ga.gov',
+  'ecorp.sos.ga.gov',
+  'sosapps.sos.ga.gov',
+  'sunbiz.org', // Florida
+  'dos.myflorida.com/sunbiz',
   'corporations.pa.gov',
   'business.ohio.gov',
   'business.nj.gov',
+  'njportal.com/dor/businessregistration',
   'cis.state.mi.us',
+  'michigan.gov/lara',
   'ilsos.gov/corporatellc',
-  
-  // Third-party services
-  'bizfileonline.sos',
-  'nvsilverflume.gov',
-  'egov.azcc.gov',
+  'mytax.illinois.gov',
+  'dor.wa.gov/open-business',
   'ccfs.sos.wa.gov',
+  'massachusettsbusinessportal.com',
+  'mass.gov/orgs/corporations-division',
+  'azcc.gov/corporations',
+  'ecorp.azcc.gov',
+  'colorado.gov/pacific/corporations',
+  'mybusinesscolorado.gov',
+  'nevadatax.nv.gov',
+  'nvsilverflume.gov',
+  'sos.mo.gov/business',
+  'mdcourts.gov/clerks/business',
+  'wisconsinsbdc.org/start-a-business',
+  'revenue.wi.gov/pages/businesses',
+  'mndeed.force.com/mbr',
+  'mblsportal.sos.state.mn.us',
+  'sos.oregon.gov/business',
+  'filinginoregon.com',
+  'scbos.sc.gov',
+  'business.ky.gov',
+  'sos.ky.gov/bus',
+  'sos.alabama.gov/business-entities',
+  'alabamainteractive.org/sos/welcome',
+  'tn.gov/revenue/tax-resources',
+  'tnbear.tn.gov/ecommerce',
+  'oksos.gov/business',
+  'ctbizfile.ct.gov',
+  'scc.virginia.gov/pages/business-entities',
+  'cis.state.mi.us/mbr',
+  'arkansas.gov/sos/corps',
+  'iaccess.iowa.gov',
+  'kssos.org/business',
+  'nebraskalegislature.gov/laws/browse-chapters',
+  'idahosbdc.org/business-license',
+  'dc.gov/service/register-your-business',
+  'dcra.dc.gov/service/business-filings',
+  'mytax.dc.gov',
+  'dor.alaska.gov',
+  'businessregistration.mt.gov',
+  'sct.naic.org/firm-sct-web/welcome',
+  
+  // County and city business portals
+  'sftreasurer.org/business',
+  'finance.lacity.org/permits',
+  'miamidade.gov/global/business',
+  'kingcounty.gov/depts/records-licensing/business',
+  
+  // Third-party registration services
+  'bizfileonline.sos',
   'businesssearch.sos',
   'bos.fdms.gov',
   'secure.utah.gov/osbr-user',
-  'sosapps.sos.ga.gov'
+  'nystax.gov',
+  'mybiz.nj.gov',
+  'businessrecords.com',
+  'texasentitysearch.com',
+  'opencorporates.com',
+  'northwestregisteredagent.com',
+  'incfile.com',
+  'legalzoom.com/business',
+  'incorporate.com',
+  'zenbusiness.com',
+  'mycorporation.com',
+  'harborcompliance.com',
+  'bizfilings.com',
+  'corpnet.com',
+  'businessformationsfiling.com'
 ];
 
 // Path patterns that indicate business registration
 const REGISTRATION_PATH_PATTERNS = [
-  '/business',
-  '/register',
-  '/filing',
-  '/incorporate',
-  '/corp',
-  '/llc',
-  '/entity',
-  '/startup',
-  '/new-business',
-  '/bizfile',
-  '/formation'
+  // General registration paths
+  '/business', '/businesses',
+  '/register', '/registration', '/registrations',
+  '/filing', '/filings', '/file',
+  '/incorporate', '/incorporation',
+  '/corp', '/corporation', '/corporations',
+  '/llc', '/limited-liability',
+  '/entity', '/entities',
+  '/startup', '/startups',
+  '/new-business', '/new-entity',
+  '/bizfile', '/business-filing',
+  '/formation', '/formations',
+  
+  // Entity type specific paths
+  '/partnerships', '/partnership',
+  '/proprietorship', '/sole-proprietor',
+  '/nonprofit', '/not-for-profit',
+  '/benefit-corporation', '/b-corp',
+  '/professional', '/pllc', '/pc',
+  '/lp', '/llp', '/lllp',
+  '/cooperative', '/co-op',
+  
+  // Registration actions
+  '/create', '/establish', '/start',
+  '/form-a-', '/create-a-', '/register-a-',
+  '/application', '/apply', '/submit',
+  '/articles', '/certificate',
+  
+  // Business documents
+  '/articles-of-organization',
+  '/articles-of-incorporation',
+  '/operating-agreement',
+  '/bylaws', '/corporate-bylaws',
+  '/statement-of-information',
+  '/annual-report', '/biennial-report',
+  
+  // Business administration
+  '/foreign-qualification',
+  '/certificate-of-authority',
+  '/certificate-of-good-standing',
+  '/doing-business-as', '/dba',
+  '/fictitious-name', '/assumed-name',
+  '/trade-name', '/trademark',
+  
+  // Tax paths
+  '/tax', '/taxes', '/taxation',
+  '/revenue', '/ein',
+  '/employer-identification',
+  '/business-tax', '/sales-tax',
+  '/withholding', '/tax-registration',
+  
+  // Government agency paths
+  '/secretary-of-state', '/sos',
+  '/division-of-corporations',
+  '/business-services',
+  '/business-information',
+  '/dept-of-revenue', '/department-of-revenue',
+  
+  // User actions
+  '/forms', '/applications',
+  '/online-filing', '/online-services',
+  '/e-file', '/electronic-filing',
+  '/business-express', '/business-portal',
+  '/business-center', '/business-hub'
 ];
 
 // Module to analyze URLs

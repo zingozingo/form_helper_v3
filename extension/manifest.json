@@ -67,7 +67,7 @@
         "*://*.sunbiz.org/*"
       ],
       "js": ["content.js"],
-      "run_at": "document_end",
+      "run_at": "document_start",
       "type": "module",
       "all_frames": true
     }

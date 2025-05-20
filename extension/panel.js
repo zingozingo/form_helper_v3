@@ -189,17 +189,27 @@ function getDetectionResult(tabId) {
   }
 }
 
+// Track connection attempts and tab
+let connectionRetryCount = 0;
+const MAX_CONNECTION_RETRIES = 3;
+let currentTabId = null;
+let autoRetryTimer = null;
+
 // Ask content script for results if background doesn't have them
 function askContentScript(tabId) {
   try {
+    currentTabId = tabId;
     // First, try to get detection status
     chrome.tabs.sendMessage(tabId, {
-      action: 'getDetectionStatus'
+      action: 'getDetectionStatus',
+      timestamp: Date.now()
     }, function(statusResult) {
       if (chrome.runtime.lastError) {
+        connectionRetryCount++;
         // Connection error - provide helpful troubleshooting
         showNoDetection();
         
+        // Create error message with auto-retry information
         const errorHtml = `
           <strong>Cannot connect to page:</strong> ${chrome.runtime.lastError.message}
           <div class="error-tips">
@@ -211,10 +221,58 @@ function askContentScript(tabId) {
               <li>The page might be in a protected state</li>
             </ul>
           </div>
+          <div id="reconnect-status">Retrying connection automatically... (${connectionRetryCount}/${MAX_CONNECTION_RETRIES})</div>
+          <button id="retry-button" class="action-button" style="margin-top: 10px; width: 100%;">Retry Connection Now</button>
         `;
         
         showError(errorHtml, true);
+        
+        // Add listener for manual retry
+        setTimeout(() => {
+          const retryButton = document.getElementById('retry-button');
+          if (retryButton) {
+            retryButton.addEventListener('click', function() {
+              connectionRetryCount = 0; // Reset counter on manual retry
+              const statusEl = document.getElementById('reconnect-status');
+              if (statusEl) statusEl.textContent = 'Connecting...';
+              getDetectionResult(tabId);
+            });
+          }
+        }, 50);
+        
+        // Auto-retry with increasing delay if not at max attempts
+        if (connectionRetryCount <= MAX_CONNECTION_RETRIES) {
+          clearTimeout(autoRetryTimer);
+          const retryDelay = Math.min(1000 * Math.pow(1.5, connectionRetryCount - 1), 10000);
+          
+          autoRetryTimer = setTimeout(function() {
+            const statusEl = document.getElementById('reconnect-status');
+            if (statusEl) statusEl.textContent = 'Attempting to reconnect...';
+            getDetectionResult(tabId);
+          }, retryDelay);
+        }
+        
         return;
+      }
+      
+      // Connection successful - reset retry counter
+      connectionRetryCount = 0;
+      
+      // Check if status includes fallback mode
+      if (statusResult && statusResult.fallbackMode) {
+        // Show warning about fallback mode
+        showError(`
+          <strong>Operating in fallback mode:</strong> Connection to browser extension is limited.
+          <div class="error-tips">
+            <ul>
+              <li>Some features may be unavailable</li>
+              <li>Try refreshing the page to restore full functionality</li>
+            </ul>
+          </div>
+        `, true);
+      } else {
+        // Normal operation - hide fallback warning
+        hideError();
       }
       
       // Check if detection is still in progress
@@ -243,7 +301,10 @@ function askContentScript(tabId) {
           
           if (result && result.isBusinessRegistrationForm !== undefined) {
             updateUI(result);
-            hideError();
+            // Only hide error if not in fallback mode
+            if (!result.fallbackMode) {
+              hideError();
+            }
           } else {
             // No valid result
             showNoDetection();
@@ -261,6 +322,36 @@ function askContentScript(tabId) {
     showNoDetection();
   }
 }
+
+// Set up a periodic connection check
+function setupConnectionMonitoring() {
+  setInterval(() => {
+    if (currentTabId) {
+      // Quietly ping the content script
+      chrome.tabs.sendMessage(currentTabId, { 
+        action: 'ping',
+        timestamp: Date.now()
+      }, function(response) {
+        // Successful ping, content script is alive
+        if (response && response.alive) {
+          const reconnectStatus = document.getElementById('reconnect-status');
+          if (reconnectStatus) {
+            reconnectStatus.textContent = 'Connected';
+          }
+          
+          // If we had an error but now have connection, refresh the panel
+          if (connectionRetryCount > 0) {
+            connectionRetryCount = 0;
+            getDetectionResult(currentTabId);
+          }
+        }
+      });
+    }
+  }, 5000); // Check every 5 seconds
+}
+
+// Initialize connection monitoring
+setupConnectionMonitoring();
 
 // Update UI with detection result
 function updateUI(result) {
