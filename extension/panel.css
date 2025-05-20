@@ -215,6 +215,18 @@ h2 {
   border-radius: 12px;
   font-size: 13px;
   line-height: 1.4;
+  animation: message-appear 0.3s ease-out;
+}
+
+@keyframes message-appear {
+  from { 
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .message.system {
@@ -234,6 +246,7 @@ h2 {
   padding: 10px;
   border-top: 1px solid #ddd;
   background-color: white;
+  position: relative;
 }
 
 #chat-input {
@@ -243,11 +256,59 @@ h2 {
   border-radius: 16px;
   font-size: 13px;
   margin-right: 8px;
+  transition: border-color 0.2s ease;
+}
+
+#chat-input:focus {
+  outline: none;
+  border-color: #2e5cb8;
+  box-shadow: 0 0 0 2px rgba(46, 92, 184, 0.2);
+}
+
+#chat-input.error {
+  border-color: #f44336;
+  animation: shake 0.4s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-5px); }
+  40%, 80% { transform: translateX(5px); }
 }
 
 #chat-submit {
   padding: 6px 12px;
   font-size: 13px;
+  transition: background-color 0.2s ease;
+}
+
+#chat-submit:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+#chat-submit.sending {
+  position: relative;
+  pointer-events: none;
+}
+
+#chat-submit.sending:after {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  top: 50%;
+  left: 50%;
+  margin-left: -6px;
+  margin-top: -6px;
+  border: 2px solid transparent;
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 /* Footer */
@@ -258,4 +319,55 @@ footer {
   color: #666;
   border-top: 1px solid #eee;
   flex-shrink: 0;
+}
+
+/* Error message styles */
+.error-container {
+  background-color: #fef1f1;
+  border: 1px solid #f8d7da;
+  color: #721c24;
+  padding: 12px;
+  margin: 8px;
+  border-radius: 4px;
+  display: none;
+  font-size: 13px;
+  max-height: 200px;
+  overflow-y: auto;
+  animation: fade-in 0.3s ease-in-out;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.error-container strong {
+  font-weight: bold;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.error-tips {
+  margin-top: 10px;
+  padding: 6px 10px;
+  background-color: #fff9f0;
+  border-left: 3px solid #f0ad4e;
+  border-radius: 2px;
+  font-size: 12px;
+}
+
+.error-tips ul {
+  margin-left: 16px;
+  margin-top: 4px;
+}
+
+.error-tips li {
+  margin-bottom: 4px;
+}
+
+.error-count {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #999;
+  text-align: right;
 }
