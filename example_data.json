@@ -1,0 +1,33 @@
+{
+  "businessName": "Acme Innovations",
+  "entityType": "LLC",
+  "principalAddress": "123 Main St, Suite 100, San Francisco, CA 94105",
+  "mailingAddress": "PO Box 12345, San Francisco, CA 94105",
+  "contactEmail": "info@acmeinnovations.com",
+  "contactPhone": "415-555-1234",
+  "owners": [
+    {
+      "name": "Jane Smith",
+      "title": "Managing Member",
+      "ownership": "60%",
+      "address": "456 Oak Ave, San Francisco, CA 94105"
+    },
+    {
+      "name": "John Doe",
+      "title": "Member",
+      "ownership": "40%",
+      "address": "789 Pine St, San Francisco, CA 94105"
+    }
+  ],
+  "businessPurpose": "Software development and consulting services",
+  "registeredAgent": {
+    "name": "Legal Services Inc.",
+    "address": "555 Market St, Suite 1000, San Francisco, CA 94105"
+  },
+  "formType": "Articles of Organization",
+  "effectiveDate": "2023-01-15",
+  "fiscalYearEnd": "12-31",
+  "ein": "",
+  "stateFilingNumber": "",
+  "naicsCode": "541511"
+}

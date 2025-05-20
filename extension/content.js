@@ -3,12 +3,203 @@
  * Implementation that detects business registration forms
  */
 
+// Initialize diagnostic tracking first to prevent ReferenceError
+// This must be defined before any code tries to use it
+const diagnostics = {
+  startTime: new Date().toISOString(),
+  browserInfo: navigator.userAgent,
+  detectionAttempts: [],
+  connectionAttempts: [],
+  errors: [],
+  moduleLoading: {
+    urlDetector: false,
+    fieldDetector: false
+  },
+  documentStates: []
+};
+
 // Import modules
 let URLDetector;
 let FieldDetector;
+
+// Safe function to track document state
+function trackDocumentState() {
+  try {
+    if (diagnostics && Array.isArray(diagnostics.documentStates)) {
+      diagnostics.documentStates.push({
+        time: new Date().toISOString(),
+        state: document.readyState,
+        bodyExists: !!document.body,
+        title: document.title || 'No title'
+      });
+    }
+  } catch (e) {
+    console.error('[BRA] Error tracking document state:', e);
+  }
+}
+
+// Add initial diagnostic information about document state
+trackDocumentState();
+
+// Track document state changes
+document.addEventListener('readystatechange', () => {
+  trackDocumentState();
+});
+
+// Load modules with retry and error handling
 (async () => {
-  URLDetector = await import(chrome.runtime.getURL('modules/urlDetector.js'));
-  FieldDetector = await import(chrome.runtime.getURL('modules/fieldDetector.js'));
+  try {
+    // Load URL detector module using regular import
+    try {
+      URLDetector = await import(chrome.runtime.getURL('modules/urlDetector.js'));
+      
+      // Safely update diagnostics
+      if (diagnostics && diagnostics.moduleLoading) {
+        diagnostics.moduleLoading.urlDetector = true;
+      }
+      
+      log('URLDetector module loaded successfully');
+    } catch (urlError) {
+      console.error('[BRA] Error loading URLDetector module:', urlError);
+      
+      // Safely push error to diagnostics
+      try {
+        if (diagnostics && Array.isArray(diagnostics.errors)) {
+          diagnostics.errors.push({
+            type: 'module_load',
+            module: 'urlDetector',
+            error: urlError.message,
+            time: new Date().toISOString()
+          });
+        }
+      } catch (diagError) {
+        console.error('[BRA] Error updating diagnostics:', diagError);
+      }
+      
+      // Since we can't use unsafe-eval, we'll have to report the error and proceed
+      reportError(urlError, 'moduleLoad_urlDetector', true);
+      
+      // Implement a fallback basic URL detector without the full module
+      URLDetector = {
+        default: class BasicURLDetector {
+          constructor() {
+            this.isBusinessRegistrationURL = this.isBusinessRegistrationURL.bind(this);
+          }
+          
+          isBusinessRegistrationURL(url) {
+            // Very basic check for common business registration keywords in URL
+            const lowerUrl = (url || '').toLowerCase();
+            const registrationKeywords = [
+              'business', 'register', 'entity', 'formation', 'file', 'corp',
+              'llc', 'incorporation', 'sos', 'secretary', 'state'
+            ];
+            
+            // Check for government domains and business keywords
+            return (
+              (lowerUrl.includes('.gov') || lowerUrl.includes('state.') || lowerUrl.includes('sos.')) &&
+              registrationKeywords.some(keyword => lowerUrl.includes(keyword))
+            );
+          }
+        }
+      };
+      
+      log('Using BasicURLDetector fallback');
+    }
+    
+    // Load field detector module using regular import
+    try {
+      FieldDetector = await import(chrome.runtime.getURL('modules/fieldDetector.js'));
+      
+      // Safely update diagnostics
+      if (diagnostics && diagnostics.moduleLoading) {
+        diagnostics.moduleLoading.fieldDetector = true;
+      }
+      
+      log('FieldDetector module loaded successfully');
+    } catch (fieldError) {
+      console.error('[BRA] Error loading FieldDetector module:', fieldError);
+      
+      // Safely push error to diagnostics
+      try {
+        if (diagnostics && Array.isArray(diagnostics.errors)) {
+          diagnostics.errors.push({
+            type: 'module_load',
+            module: 'fieldDetector',
+            error: fieldError.message,
+            time: new Date().toISOString()
+          });
+        }
+      } catch (diagError) {
+        console.error('[BRA] Error updating diagnostics:', diagError);
+      }
+      
+      // Since we can't use unsafe-eval, we'll have to report the error and proceed
+      reportError(fieldError, 'moduleLoad_fieldDetector', true);
+      
+      // Implement a basic field detector as fallback
+      FieldDetector = {
+        default: class BasicFieldDetector {
+          constructor(rootElement) {
+            this.root = rootElement || document;
+            this.fields = [];
+          }
+          
+          detectFields() {
+            try {
+              // Reset fields
+              this.fields = [];
+              
+              // Get all input elements using a basic selector
+              const inputElements = this.root.querySelectorAll('input, select, textarea');
+              console.log(`[BRA-BasicFieldDetector] Found ${inputElements.length} potential input elements`);
+              
+              // Process each input element with basic extraction
+              inputElements.forEach((element, index) => {
+                try {
+                  const field = this._extractBasicFieldInfo(element);
+                  if (field) {
+                    field.index = index;
+                    this.fields.push(field);
+                  }
+                } catch (error) {
+                  console.error('[BRA-BasicFieldDetector] Error processing field:', error);
+                }
+              });
+              
+              return this.fields;
+            } catch (error) {
+              console.error('[BRA-BasicFieldDetector] Error detecting fields:', error);
+              return [];
+            }
+          }
+          
+          _extractBasicFieldInfo(element) {
+            // Extract only essential info
+            return {
+              element: element,
+              tagName: element.tagName.toLowerCase(),
+              type: element.type || element.tagName.toLowerCase(),
+              id: element.id || '',
+              name: element.name || '',
+              value: element.value || '',
+              placeholder: element.placeholder || '',
+              required: element.required || false
+            };
+          }
+          
+          getFields() {
+            return this.fields;
+          }
+        }
+      };
+      
+      log('Using BasicFieldDetector fallback');
+    }
+  } catch (moduleError) {
+    // Generic module loading error
+    console.error('[BRA] Error in module loading:', moduleError);
+    reportError(moduleError, 'moduleLoading', true);
+  }
 })();
 
 // Global variables
@@ -23,6 +214,14 @@ let connectionEstablished = false; // Track if we've successfully connected to b
 let fallbackDetectionMode = false; // Flag to indicate if we're using fallback detection
 let connectionAttempts = 0; // Track connection attempts
 
+// Detection strategies tracking
+const detectionStrategies = {
+  documentEnd: { attempted: false, success: false },
+  windowLoad: { attempted: false, success: false },
+  delayedExecution: { attempted: false, success: false },
+  mutationObserver: { attempted: false, success: false }
+};
+
 // Simple logger
 function log(message, data) {
   const prefix = '[BRA]';
@@ -34,48 +233,139 @@ function log(message, data) {
 }
 
 /**
+ * Log diagnostic information for troubleshooting
+ * @param {string} category - The diagnostic category
+ * @param {Object} data - Diagnostic data
+ */
+function logDiagnostic(category, data) {
+  try {
+    // Safety check - ensure diagnostics object exists
+    if (!diagnostics) {
+      console.error('[BRA] Diagnostics object not initialized');
+      return;
+    }
+    
+    // Add timestamp
+    const entry = {
+      timestamp: new Date().toISOString(),
+      category,
+      data
+    };
+    
+    // Safely store in appropriate category
+    if (category === 'detection') {
+      if (Array.isArray(diagnostics.detectionAttempts)) {
+        diagnostics.detectionAttempts.push(entry);
+      } else {
+        diagnostics.detectionAttempts = [entry];
+      }
+    } else if (category === 'connection') {
+      if (Array.isArray(diagnostics.connectionAttempts)) {
+        diagnostics.connectionAttempts.push(entry);
+      } else {
+        diagnostics.connectionAttempts = [entry];
+      }
+    } else if (category === 'error') {
+      if (Array.isArray(diagnostics.errors)) {
+        diagnostics.errors.push(entry);
+      } else {
+        diagnostics.errors = [entry];
+      }
+    } else {
+      // Generic diagnostics
+      if (!diagnostics[category]) {
+        diagnostics[category] = [];
+      }
+      
+      if (Array.isArray(diagnostics[category])) {
+        diagnostics[category].push(entry);
+      } else {
+        diagnostics[category] = [entry];
+      }
+    }
+    
+    // Log to console in debug mode
+    if (window.BRA_DEBUG) {
+      console.log(`[BRA-Diagnostic] [${category}]:`, data);
+    }
+  } catch (e) {
+    // Last resort - if even diagnostic logging fails, at least log to console
+    console.error('[BRA] Error in diagnostic logging:', e);
+  }
+}
+
+/**
  * Reports an error to the background script
  * @param {Error} error - The error that occurred
  * @param {string} context - Context where the error occurred
  * @param {boolean} isFatal - Whether the error is fatal and should be shown to the user
  */
 function reportError(error, context, isFatal = false) {
-  console.error('[BRA] Error in ' + context + ':', error);
-  
-  // Create error object once to reuse
-  const errorData = {
-    action: 'detectionError',
-    error: {
-      message: error.message,
-      stack: error.stack,
-      context: context,
-      isFatal: isFatal,
-      timestamp: new Date().toISOString(),
-      url: window.location.href
-    }
-  };
-  
-  // Try to send message with retries
-  sendMessageWithRetry(errorData, function(response) {
-    // Success callback - connection established
-    connectionEstablished = true;
-    log('Error reported successfully');
-  }, function() {
-    // Error callback after retries failed
-    console.error('[BRA] Failed to report error after retries');
+  try {
+    console.error('[BRA] Error in ' + context + ':', error);
     
-    // Store locally for fallback UI display
-    if (!window.BRA_Errors) {
-      window.BRA_Errors = [];
+    // Safely log to diagnostics first
+    try {
+      if (diagnostics && Array.isArray(diagnostics.errors)) {
+        diagnostics.errors.push({
+          message: error?.message || 'Unknown error',
+          stack: error?.stack,
+          context: context,
+          isFatal: isFatal,
+          timestamp: new Date().toISOString()
+        });
+      }
+    } catch (diagError) {
+      console.error('[BRA] Failed to log error to diagnostics:', diagError);
     }
-    window.BRA_Errors.push(errorData.error);
     
-    // Switch to fallback mode if we keep failing to connect
-    if (!fallbackDetectionMode && context !== 'messageSend') {
-      fallbackDetectionMode = true;
-      log('Switching to fallback detection mode');
+    // Create error object once to reuse
+    const errorData = {
+      action: 'detectionError',
+      error: {
+        message: error?.message || 'Unknown error',
+        stack: error?.stack,
+        context: context,
+        isFatal: isFatal,
+        timestamp: new Date().toISOString(),
+        url: window.location.href
+      }
+    };
+    
+    // Store locally for fallback UI display first (in case sending fails)
+    if (typeof window !== 'undefined') {
+      if (!window.BRA_Errors) {
+        window.BRA_Errors = [];
+      }
+      window.BRA_Errors.push(errorData.error);
     }
-  });
+    
+    // Check if we can send messages
+    if (typeof sendMessageWithRetry !== 'function') {
+      console.error('[BRA] Cannot report error: sendMessageWithRetry not defined');
+      return;
+    }
+    
+    // Try to send message with retries
+    sendMessageWithRetry(errorData, function(response) {
+      // Success callback - connection established
+      connectionEstablished = true;
+      log('Error reported successfully');
+    }, function() {
+      // Error callback after retries failed
+      console.error('[BRA] Failed to report error after retries');
+      
+      // Switch to fallback mode if we keep failing to connect
+      if (!fallbackDetectionMode && context !== 'messageSend') {
+        fallbackDetectionMode = true;
+        log('Switching to fallback detection mode');
+      }
+    });
+  } catch (reportingError) {
+    // Last resort - log to console if error reporting itself fails
+    console.error('[BRA] Fatal error in error reporting:', reportingError);
+    console.error('[BRA] Original error (', context, '):', error);
+  }
 }
 
 /**
@@ -98,56 +388,137 @@ function sendMessageWithRetry(message, successCallback, errorCallback, retryCoun
       timestamp: Date.now()
     };
     
-    // Send the message
-    chrome.runtime.sendMessage(message, function(response) {
-      // Check for error
-      if (chrome.runtime.lastError) {
-        const error = chrome.runtime.lastError;
-        
-        // If we have retries left, try again
-        if (retryCount < CONNECTION_RETRY_MAX) {
-          log('Message send error, retrying (' + (retryCount + 1) + '/' + CONNECTION_RETRY_MAX + '): ' + error.message);
+    // Check if runtime is available
+    if (!chrome || !chrome.runtime) {
+      throw new Error('Chrome runtime not available');
+    }
+    
+    // Check if we can send messages
+    if (typeof chrome.runtime.sendMessage !== 'function') {
+      throw new Error('Chrome runtime sendMessage not available');
+    }
+    
+    // Track connection attempts
+    connectionAttempts++;
+    logDiagnostic('connection', {
+      attempt: connectionAttempts,
+      messageId: messageId,
+      action: message.action,
+      timestamp: Date.now()
+    });
+    
+    // Send the message with improved error handling
+    try {
+      chrome.runtime.sendMessage(message, function(response) {
+        // Check for error
+        if (chrome.runtime.lastError) {
+          const error = chrome.runtime.lastError;
           
-          // Retry with exponential backoff
-          setTimeout(function() {
-            sendMessageWithRetry(message, successCallback, errorCallback, retryCount + 1);
-          }, CONNECTION_RETRY_DELAY * Math.pow(2, retryCount));
-        } else {
-          // We've exhausted retries
-          log('Message send failed after ' + CONNECTION_RETRY_MAX + ' retries');
+          // Log detailed error info
+          logDiagnostic('error', {
+            phase: 'messageSend',
+            error: error.message,
+            messageId: messageId,
+            action: message.action,
+            retryCount: retryCount
+          });
           
-          // Trigger error callback
-          if (errorCallback) {
-            errorCallback(error);
+          // If we have retries left, try again
+          if (retryCount < CONNECTION_RETRY_MAX) {
+            log('Message send error, retrying (' + (retryCount + 1) + '/' + CONNECTION_RETRY_MAX + '): ' + error.message);
+            
+            // Retry with exponential backoff
+            setTimeout(function() {
+              sendMessageWithRetry(message, successCallback, errorCallback, retryCount + 1);
+            }, CONNECTION_RETRY_DELAY * Math.pow(2, retryCount));
+          } else {
+            // We've exhausted retries
+            log('Message send failed after ' + CONNECTION_RETRY_MAX + ' retries');
+            
+            // Trigger error callback
+            if (errorCallback) {
+              errorCallback(error);
+            }
+            
+            // Clean up
+            delete pendingMessageCallbacks[messageId];
+            
+            // Report connection error unless this is already a report error call
+            if (message.action !== 'detectionError') {
+              const connectionError = new Error('Failed to establish connection: ' + error.message);
+              reportError(connectionError, 'messageSend', true);
+            }
           }
-          
-          // Clean up
-          delete pendingMessageCallbacks[messageId];
-          
-          // Report connection error unless this is already a report error call
-          if (message.action !== 'detectionError') {
-            const connectionError = new Error('Failed to establish connection: ' + error.message);
-            reportError(connectionError, 'messageSend', true);
-          }
+          return;
         }
-        return;
-      }
+        
+        // Success - call the callback
+        if (successCallback) {
+          successCallback(response);
+        }
+        
+        // Record successful communication
+        logDiagnostic('connection', {
+          status: 'success',
+          messageId: messageId,
+          action: message.action,
+          responseReceived: !!response,
+          timestamp: Date.now()
+        });
+        
+        // Clean up
+        delete pendingMessageCallbacks[messageId];
+        
+        // Mark that we've established connection at least once
+        connectionEstablished = true;
+        connectionAttempts = 0;
+      });
+    } catch (runtimeError) {
+      // Handle errors from sendMessage itself
+      console.error('[BRA] Runtime error sending message:', runtimeError.message);
+      logDiagnostic('error', {
+        phase: 'runtimeSendMessage',
+        error: runtimeError.message,
+        stack: runtimeError.stack,
+        messageId: messageId
+      });
       
-      // Success - call the callback
-      if (successCallback) {
-        successCallback(response);
+      // Try to recover from runtime errors by falling back
+      if (errorCallback) {
+        errorCallback(runtimeError);
       }
       
       // Clean up
       delete pendingMessageCallbacks[messageId];
       
-      // Mark that we've established connection at least once
-      connectionEstablished = true;
-      connectionAttempts = 0;
-    });
+      // Attempt to reconnect to background service worker
+      if (!message.action.includes('reconnect') && retryCount < 1) {
+        log('Attempting to reconnect to service worker after runtime error');
+        setTimeout(() => {
+          sendMessageWithRetry({
+            action: 'reconnect',
+            timestamp: Date.now()
+          }, () => {
+            // Try the original message again after reconnect
+            setTimeout(() => {
+              sendMessageWithRetry(message, successCallback, errorCallback, 0);
+            }, 100);
+          }, null);
+        }, 500);
+      }
+    }
   } catch (e) {
     // Local error in sending
     console.error('[BRA] Error sending message:', e.message);
+    
+    // More detailed error logging
+    logDiagnostic('error', {
+      phase: 'messageSendSetup',
+      error: e.message,
+      stack: e.stack,
+      messageId: messageId || 'unknown',
+      action: message.action
+    });
     
     // Call error callback
     if (errorCallback) {
@@ -155,7 +526,7 @@ function sendMessageWithRetry(message, successCallback, errorCallback, retryCoun
     }
     
     // Report error unless this is already a report error call
-    if (message.action !== 'detectionError') {
+    if (!message.action || message.action !== 'detectionError') {
       reportError(e, 'messageSend');
     }
   }
@@ -167,29 +538,89 @@ function sendMessageWithRetry(message, successCallback, errorCallback, retryCoun
 function initializeDetection() {
   log('Initializing content script with improved loading strategy');
   
+  logDiagnostic('initialization', {
+    documentState: document.readyState,
+    bodyExists: !!document.body,
+    url: window.location.href,
+    title: document.title || 'No title',
+    moduleStatus: {
+      urlDetector: !!URLDetector,
+      fieldDetector: !!FieldDetector
+    }
+  });
+  
   // Wait a bit to ensure the module is loaded
   setTimeout(() => {
-    // Strategy 1: Try at document_end (set in manifest)
-    tryDetection();
-    
-    // Strategy 2: Wait for load event
-    if (document.readyState === 'complete') {
-      tryDetection();
-    } else {
-      window.addEventListener('load', () => {
-        log('Window load event fired');
-        tryDetection();
+    try {
+      // Strategy 1: Try at document_end (set in manifest)
+      detectionStrategies.documentEnd.attempted = true;
+      logDiagnostic('strategy', {
+        name: 'documentEnd',
+        attempted: true,
+        documentState: document.readyState
       });
+      
+      tryDetection('documentEnd');
+      
+      // Strategy 2: Wait for load event
+      if (document.readyState === 'complete') {
+        detectionStrategies.windowLoad.attempted = true;
+        logDiagnostic('strategy', {
+          name: 'windowLoad',
+          attempted: true,
+          documentState: document.readyState,
+          immediateExecution: true
+        });
+        
+        tryDetection('windowLoad');
+      } else {
+        window.addEventListener('load', () => {
+          log('Window load event fired');
+          detectionStrategies.windowLoad.attempted = true;
+          logDiagnostic('strategy', {
+            name: 'windowLoad',
+            attempted: true,
+            documentState: document.readyState,
+            immediateExecution: false
+          });
+          
+          tryDetection('windowLoad');
+        });
+      }
+      
+      // Strategy 3: Delayed execution for slow-loading pages
+      setTimeout(() => {
+        log('Delayed execution triggered');
+        detectionStrategies.delayedExecution.attempted = true;
+        logDiagnostic('strategy', {
+          name: 'delayedExecution',
+          attempted: true,
+          documentState: document.readyState,
+          existingResult: !!detectionResult
+        });
+        
+        // Only try if we don't already have a result
+        if (!detectionResult) {
+          tryDetection('delayedExecution');
+        }
+      }, 2500);
+      
+      // Strategy 4: MutationObserver for dynamically loaded content
+      setupMutationObserver();
+    } catch (initError) {
+      console.error('[BRA] Error during initialization:', initError);
+      logDiagnostic('error', {
+        phase: 'initialization',
+        error: initError.message,
+        stack: initError.stack
+      });
+      
+      // Report the error but continue with fallback mechanisms
+      reportError(initError, 'initialization', false);
+      
+      // Try basic detection anyway
+      tryDetection('fallback');
     }
-    
-    // Strategy 3: Delayed execution for slow-loading pages
-    setTimeout(() => {
-      log('Delayed execution triggered');
-      tryDetection();
-    }, 2500);
-    
-    // Strategy 4: MutationObserver for dynamically loaded content
-    setupMutationObserver();
   }, 100);
 }
 
@@ -247,6 +678,11 @@ function setupMutationObserver() {
             observer.disconnect();
             log('MutationObserver disconnected after successful detection or max attempts');
           }
+          
+          // Wait until field detection is complete before disconnecting
+          if (detectionResult && detectionResult.forms && detectionResult.forms.length > 0) {
+            observer.disconnect();
+          }
         }
       } catch (observerError) {
         // Handle errors in the observer callback
@@ -279,49 +715,214 @@ function setupMutationObserver() {
 
 /**
  * Try to detect business forms with retry mechanism
+ * @param {string} strategy - The detection strategy being used
  */
-async function tryDetection() {
+async function tryDetection(strategy = 'unknown') {
   // Avoid redundant detections if we already have a result
   if (detectionResult) {
-    log('Detection already completed, skipping');
+    log(`Detection already completed, skipping (strategy: ${strategy})`);
+    logDiagnostic('detection', {
+      strategy,
+      action: 'skipped',
+      reason: 'already_completed',
+      attempts: detectionAttempts
+    });
     return;
   }
   
   // Increment attempt counter
   detectionAttempts++;
-  log('Detection attempt ' + detectionAttempts + '/' + MAX_DETECTION_ATTEMPTS);
+  log('Detection attempt ' + detectionAttempts + '/' + MAX_DETECTION_ATTEMPTS + ` (strategy: ${strategy})`);
+  
+  // Log detailed diagnostic information
+  logDiagnostic('detection', {
+    strategy,
+    attempt: detectionAttempts,
+    maxAttempts: MAX_DETECTION_ATTEMPTS,
+    documentState: document.readyState,
+    bodyExists: !!document.body,
+    moduleStatus: {
+      urlDetector: !!URLDetector,
+      fieldDetector: !!FieldDetector
+    },
+    fallbackMode: fallbackDetectionMode,
+    timestamp: new Date().toISOString()
+  });
+  
+  // Perform some basic sanity checks first
+  if (!document.body) {
+    logDiagnostic('detection', {
+      strategy,
+      error: 'document_body_missing',
+      documentState: document.readyState
+    });
+    
+    // Don't count as an attempt if document.body is missing
+    detectionAttempts--;
+    
+    // If we're at a late document state with no body, that's unusual
+    if (document.readyState === 'complete') {
+      reportError(
+        new Error('Document body missing in complete state'),
+        'bodyMissing',
+        false
+      );
+      
+      // Wait and retry
+      setTimeout(() => tryDetection(strategy + '_bodyRetry'), 1000);
+    } else {
+      // Wait for document to be more ready
+      log('Document body not available yet, will retry when document is more complete');
+      
+      // Set a fallback timeout
+      setTimeout(() => {
+        if (!detectionResult && document.body) {
+          tryDetection(strategy + '_bodyDelayed');
+        }
+      }, 2000);
+    }
+    return;
+  }
+  
+  // Check if required modules are available
+  if (!URLDetector) {
+    logDiagnostic('detection', {
+      strategy,
+      error: 'url_detector_missing',
+      moduleLoadingState: diagnostics.moduleLoading
+    });
+    
+    reportError(
+      new Error('URLDetector module not available'),
+      'modulesMissing',
+      false
+    );
+    
+    // Wait a bit for modules to load
+    setTimeout(() => tryDetection(strategy + '_moduleRetry'), 500);
+    return;
+  }
   
   // Attempt detection
   try {
+    // Send a pre-detection ping to ensure connection
+    try {
+      await sendPreDetectionPing();
+    } catch (pingError) {
+      // Log but continue - we'll still try to detect
+      logDiagnostic('detection', {
+        strategy,
+        pingError: pingError.message,
+        continuing: true
+      });
+    }
+    
+    // Record start time for performance monitoring
+    const startTime = performance.now();
+    
+    // Perform the actual detection
     await detectBusinessForm();
+    
+    // Record end time and duration
+    const endTime = performance.now();
+    const duration = endTime - startTime;
+    
+    // Update strategy success
+    if (strategy in detectionStrategies) {
+      detectionStrategies[strategy].success = !!detectionResult;
+    }
+    
+    // Log successful detection
+    logDiagnostic('detection_complete', {
+      strategy,
+      success: !!detectionResult,
+      duration: duration,
+      isBusinessForm: detectionResult ? detectionResult.isBusinessRegistrationForm : false,
+      confidenceScore: detectionResult ? detectionResult.confidenceScore : 0,
+      fieldCount: detectionResult && detectionResult.fieldAnalysis ? detectionResult.fieldAnalysis.totalFields : 0
+    });
     
     // Only report success if we're not in fallback mode
     if (!fallbackDetectionMode && detectionResult) {
+      // Add diagnostic information to detection result
+      detectionResult.diagnostics = {
+        detectionStrategy: strategy,
+        detectionAttempt: detectionAttempts,
+        detectionDuration: duration,
+        documentState: document.readyState,
+        documentStateHistory: diagnostics.documentStates,
+        strategyAttempts: { ...detectionStrategies }
+      };
+      
       // Send result to background script with retry
       sendMessageWithRetry({
         action: 'formDetected',
         result: detectionResult
       }, function(response) {
         log('Detection result reported successfully');
-      }, function() {
+        
+        // Log success with diagnostic info
+        logDiagnostic('reporting', {
+          action: 'form_detected',
+          success: true,
+          response: response
+        });
+      }, function(error) {
         log('Failed to report detection result, but detection succeeded locally');
+        
+        // Log failure with diagnostic info
+        logDiagnostic('reporting', {
+          action: 'form_detected',
+          success: false,
+          error: error ? error.message : 'Unknown error'
+        });
       });
     }
   } catch (error) {
     // Determine if this is a fatal error
     const isFatal = detectionAttempts >= MAX_DETECTION_ATTEMPTS;
     
+    // Log detailed error diagnostics
+    logDiagnostic('detection_error', {
+      strategy,
+      attempt: detectionAttempts,
+      error: error.message,
+      stack: error.stack,
+      isFatal: isFatal,
+      documentState: document.readyState,
+      bodyExists: !!document.body,
+      moduleStatus: {
+        urlDetector: !!URLDetector,
+        fieldDetector: !!FieldDetector
+      }
+    });
+    
     // Report the error with proper context
-    reportError(error, 'tryDetection', isFatal);
+    reportError(error, `tryDetection_${strategy}`, isFatal);
     
     // Retry if we haven't exceeded max attempts
     if (detectionAttempts < MAX_DETECTION_ATTEMPTS) {
       // Increase delay for each retry with exponential backoff
       const currentDelay = RETRY_DELAY * Math.pow(1.5, detectionAttempts - 1);
       log('Will retry detection in ' + currentDelay + 'ms');
-      setTimeout(tryDetection, currentDelay);
+      
+      logDiagnostic('retry_scheduled', {
+        strategy,
+        nextAttempt: detectionAttempts + 1,
+        delay: currentDelay,
+        nextStrategy: strategy + '_retry'
+      });
+      
+      setTimeout(() => tryDetection(strategy + '_retry'), currentDelay);
     } else {
       log('Maximum detection attempts reached, giving up');
+      
+      // Log the final failure
+      logDiagnostic('detection_giving_up', {
+        attempts: detectionAttempts,
+        lastError: error.message,
+        strategies: detectionStrategies
+      });
       
       // Create a fallback minimal detection result in case messaging fails
       if (!detectionResult) {
@@ -331,7 +932,12 @@ async function tryDetection() {
           fallbackMode: true,
           error: 'Detection failed after ' + MAX_DETECTION_ATTEMPTS + ' attempts',
           url: window.location.href,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          diagnostics: {
+            errors: diagnostics.errors,
+            documentStateHistory: diagnostics.documentStates,
+            strategyAttempts: { ...detectionStrategies }
+          }
         };
       }
       
@@ -340,9 +946,25 @@ async function tryDetection() {
         sendMessageWithRetry({
           action: 'detectionFailed',
           attempts: detectionAttempts,
-          url: window.location.href
-        }, null, function(e) {
-          console.error('[BRA] Failed to report detection failure:', e);
+          url: window.location.href,
+          diagnostics: {
+            errors: diagnostics.errors,
+            documentStateHistory: diagnostics.documentStates,
+            strategyAttempts: { ...detectionStrategies }
+          }
+        }, response => {
+          logDiagnostic('reporting', {
+            action: 'detection_failed',
+            success: true,
+            response: response
+          });
+        }, error => {
+          console.error('[BRA] Failed to report detection failure:', error);
+          logDiagnostic('reporting', {
+            action: 'detection_failed',
+            success: false,
+            error: error ? error.message : 'Unknown error'
+          });
         });
       }
       
@@ -355,11 +977,60 @@ async function tryDetection() {
 }
 
 /**
+ * Send a pre-detection ping to ensure connection to background
+ * @returns {Promise} Resolves when ping succeeds
+ */
+async function sendPreDetectionPing() {
+  return new Promise((resolve, reject) => {
+    // Skip if connection already established
+    if (connectionEstablished) {
+      resolve();
+      return;
+    }
+    
+    sendMessageWithRetry({
+      action: 'ping',
+      timestamp: Date.now(),
+      preDetection: true
+    }, response => {
+      connectionEstablished = true;
+      resolve(response);
+    }, error => {
+      // Don't reject - we'll still try to detect
+      resolve(null);
+    });
+  });
+}
+
+/**
  * Shows a minimal visual indicator in fallback mode when messaging fails
  * @param {string} message - Message to display
+ * @param {Object} options - Optional configuration
+ * @param {boolean} options.showTroubleshooting - Whether to show troubleshooting steps
+ * @param {number} options.duration - How long to show the indicator in ms
+ * @param {string} options.errorType - Type of error for specific troubleshooting
  */
-function showFallbackIndicator(message) {
+function showFallbackIndicator(message, options = {}) {
   try {
+    // Record that we're showing a fallback indicator
+    logDiagnostic('fallback_indicator', {
+      message,
+      options,
+      documentState: document.readyState,
+      connectionStatus: {
+        established: connectionEstablished,
+        attempts: connectionAttempts
+      }
+    });
+    
+    // Default options
+    const config = {
+      showTroubleshooting: true,
+      duration: 30000, // Longer duration by default
+      errorType: 'unknown',
+      ...options
+    };
+    
     // Only add once
     if (document.getElementById('bra-fallback-indicator')) {
       return;
@@ -374,45 +1045,259 @@ function showFallbackIndicator(message) {
       right: 20px;
       background-color: #f44336;
       color: white;
-      padding: 10px 15px;
-      border-radius: 4px;
+      padding: 15px;
+      border-radius: 6px;
       font-family: Arial, sans-serif;
-      font-size: 12px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+      font-size: 13px;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.4);
       z-index: 9999999;
-      max-width: 300px;
+      max-width: 350px;
+      line-height: 1.4;
     `;
     
-    // Add icon
+    // Generate troubleshooting tips based on error type
+    let troubleshootingHtml = '';
+    if (config.showTroubleshooting) {
+      const generalTips = `
+        <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.3);">
+          <div style="font-weight: bold; margin-bottom: 5px;">Troubleshooting:</div>
+          <ul style="margin: 5px 0 5px 15px; padding: 0;">
+            <li>Try refreshing the page</li>
+            <li>Check extension permissions</li>
+            <li>Disable other conflicting extensions</li>
+            <li>Check for Content Security Policy restrictions</li>
+          </ul>
+        </div>
+      `;
+      
+      // Specific tips based on error type
+      let specificTips = '';
+      if (config.errorType === 'connection') {
+        specificTips = `
+          <div style="margin-top: 5px;">
+            <div style="font-weight: bold;">Connection Issues:</div>
+            <ul style="margin: 5px 0 5px 15px; padding: 0;">
+              <li>Check if extension is enabled</li>
+              <li>Try restarting your browser</li>
+              <li>Re-install the extension</li>
+            </ul>
+          </div>
+        `;
+      } else if (config.errorType === 'module_loading') {
+        specificTips = `
+          <div style="margin-top: 5px;">
+            <div style="font-weight: bold;">Module Loading Issues:</div>
+            <ul style="margin: 5px 0 5px 15px; padding: 0;">
+              <li>Check website's Content Security Policy</li>
+              <li>Try reloading without cache (Ctrl+Shift+R)</li>
+              <li>Check for script blockers</li>
+            </ul>
+          </div>
+        `;
+      }
+      
+      troubleshootingHtml = generalTips + specificTips;
+    }
+    
+    // Add "Show Details" button
+    const diagnosticDetails = JSON.stringify({
+      timestamp: new Date().toISOString(),
+      documentState: document.readyState,
+      moduleStatus: {
+        urlDetector: !!URLDetector,
+        fieldDetector: !!FieldDetector
+      },
+      connectionStatus: {
+        established: connectionEstablished,
+        attempts: connectionAttempts
+      },
+      detectionAttempts,
+      strategies: detectionStrategies,
+      errors: diagnostics.errors.slice(-3) // Last 3 errors
+    }, null, 2);
+    
+    // Add icon and content
     indicator.innerHTML = `
-      <div style="display: flex; align-items: center;">
-        <div style="margin-right: 10px;">⚠️</div>
-        <div>
-          <div style="font-weight: bold; margin-bottom: 3px;">Business Registration Assistant</div>
-          <div>${message}</div>
-          <div style="margin-top: 5px; font-size: 10px;">Click to dismiss</div>
+      <div>
+        <div style="display: flex; align-items: flex-start; margin-bottom: 10px;">
+          <div style="margin-right: 12px; font-size: 20px;">⚠️</div>
+          <div style="flex: 1;">
+            <div style="font-weight: bold; margin-bottom: 5px; font-size: 14px;">Business Registration Assistant</div>
+            <div>${message}</div>
+          </div>
+        </div>
+        ${troubleshootingHtml}
+        <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center;">
+          <button id="bra-fallback-retry" style="
+            background-color: white;
+            color: #f44336;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+          ">Try Again</button>
+          <button id="bra-fallback-details" style="
+            background: none;
+            border: 1px solid rgba(255,255,255,0.5);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 10px;
+          ">Details</button>
+          <div style="font-size: 11px; margin-left: 10px; cursor: pointer;" id="bra-fallback-dismiss">Dismiss</div>
         </div>
       </div>
     `;
     
-    // Add click to dismiss
-    indicator.addEventListener('click', function() {
+    // Add to document
+    document.body.appendChild(indicator);
+    
+    // Set up event listeners
+    document.getElementById('bra-fallback-retry').addEventListener('click', function() {
+      // Remove the indicator
+      if (indicator.parentNode) {
+        indicator.parentNode.removeChild(indicator);
+      }
+      
+      // Retry detection with a fresh attempt
+      detectionAttempts = 0;
+      fallbackDetectionMode = false;
+      tryDetection('manual_retry');
+    });
+    
+    document.getElementById('bra-fallback-details').addEventListener('click', function() {
+      // Create a modal with diagnostic information
+      const modalOverlay = document.createElement('div');
+      modalOverlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0, 0, 0, 0.7);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999999;
+      `;
+      
+      const modal = document.createElement('div');
+      modal.style.cssText = `
+        background-color: white;
+        border-radius: 8px;
+        width: 80%;
+        max-width: 600px;
+        max-height: 80vh;
+        overflow-y: auto;
+        padding: 20px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+        position: relative;
+      `;
+      
+      modal.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+          <h2 style="margin: 0; font-size: 18px; color: #333;">Diagnostic Information</h2>
+          <button id="bra-modal-close" style="
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #999;
+          ">×</button>
+        </div>
+        <pre style="
+          background-color: #f5f5f5;
+          padding: 15px;
+          border-radius: 4px;
+          overflow-x: auto;
+          white-space: pre-wrap;
+          font-family: monospace;
+          font-size: 12px;
+          color: #333;
+        ">${diagnosticDetails}</pre>
+        <div style="margin-top: 15px; text-align: right;">
+          <button id="bra-modal-copy" style="
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+          ">Copy to Clipboard</button>
+        </div>
+      `;
+      
+      modalOverlay.appendChild(modal);
+      document.body.appendChild(modalOverlay);
+      
+      // Set up modal event listeners
+      document.getElementById('bra-modal-close').addEventListener('click', function() {
+        document.body.removeChild(modalOverlay);
+      });
+      
+      document.getElementById('bra-modal-copy').addEventListener('click', function() {
+        // Copy diagnostic details to clipboard
+        try {
+          navigator.clipboard.writeText(diagnosticDetails)
+            .then(() => {
+              this.textContent = 'Copied!';
+              setTimeout(() => {
+                this.textContent = 'Copy to Clipboard';
+              }, 2000);
+            })
+            .catch(() => {
+              // Fallback for browsers that don't support clipboard API
+              const textarea = document.createElement('textarea');
+              textarea.value = diagnosticDetails;
+              textarea.style.position = 'fixed';
+              document.body.appendChild(textarea);
+              textarea.select();
+              document.execCommand('copy');
+              document.body.removeChild(textarea);
+              
+              this.textContent = 'Copied!';
+              setTimeout(() => {
+                this.textContent = 'Copy to Clipboard';
+              }, 2000);
+            });
+        } catch (e) {
+          this.textContent = 'Copy Failed';
+          setTimeout(() => {
+            this.textContent = 'Copy to Clipboard';
+          }, 2000);
+        }
+      });
+      
+      // Close when clicking outside
+      modalOverlay.addEventListener('click', function(e) {
+        if (e.target === modalOverlay) {
+          document.body.removeChild(modalOverlay);
+        }
+      });
+    });
+    
+    document.getElementById('bra-fallback-dismiss').addEventListener('click', function() {
       if (indicator.parentNode) {
         indicator.parentNode.removeChild(indicator);
       }
     });
     
-    // Add to document
-    document.body.appendChild(indicator);
-    
-    // Auto-remove after 10 seconds
+    // Auto-remove after specified duration
     setTimeout(function() {
       if (indicator.parentNode) {
         indicator.parentNode.removeChild(indicator);
       }
-    }, 10000);
+    }, config.duration);
   } catch (e) {
     console.error('[BRA] Failed to show fallback indicator:', e.message);
+    logDiagnostic('error', {
+      component: 'fallback_indicator',
+      error: e.message,
+      stack: e.stack
+    });
   }
 }
 
@@ -685,6 +1570,14 @@ async function detectBusinessForm() {
       specificFormDetails: specificFormDetails,
       formStructure: formStructure,
       adaptiveConfidence: adaptiveConfidence,
+      forms: [], // Will be populated by field detection
+      fieldAnalysis: {
+        fieldDetectionComplete: false,
+        totalFields: 0,
+        classifiedFields: 0,
+        classificationRate: 0,
+        businessFields: {}
+      },
       details: {
         urlScore,
         contentScore,
@@ -732,6 +1625,24 @@ async function detectBusinessForm() {
               const fields = detector.detectFields();
               log(`Form ${index + 1}: Detected ${fields.length} fields`);
               
+              // Classify fields based on business registration patterns
+              const classificationResults = detector.classifyFields();
+              log(`Form ${index + 1}: Classified ${classificationResults.classifiedFields} of ${fields.length} fields`);
+              
+              // Get a summary of classified fields with relationship information
+              const classSummary = detector.getClassificationSummary();
+              
+              // Log any field relationships found
+              const fieldsWithRelationships = fields.filter(f => 
+                f.classification && 
+                f.classification.relationships && 
+                f.classification.relationships.length > 0
+              );
+              
+              if (fieldsWithRelationships.length > 0) {
+                log(`Form ${index + 1}: Found ${fieldsWithRelationships.length} fields with relationships`);
+              }
+              
               // Add form to detection result for further analysis
               if (!detectionResult.forms) {
                 detectionResult.forms = [];
@@ -742,7 +1653,15 @@ async function detectBusinessForm() {
                 id: formElement.id || null,
                 action: formElement.action || null,
                 method: formElement.method || 'get',
-                fieldCount: fields.length
+                fieldCount: fields.length,
+                fieldClassification: {
+                  classifiedCount: classSummary.classifiedFields,
+                  classificationRate: classSummary.classificationRate,
+                  categories: classSummary.categories,
+                  relationships: classSummary.relationships || {}
+                },
+                // Include export data for more detailed analysis if needed
+                detectionData: detector.exportDetectionData()
               });
             } catch (formFieldError) {
               reportError(formFieldError, `fieldDetection_form_${index}`, false);
@@ -760,6 +1679,24 @@ async function detectBusinessForm() {
             const fields = detector.detectFields();
             log(`Detected ${fields.length} fields in document body`);
             
+            // Classify fields based on business registration patterns
+            const classificationResults = detector.classifyFields();
+            log(`Classified ${classificationResults.classifiedFields} of ${fields.length} fields in document body`);
+            
+            // Get a summary of classified fields
+            const classSummary = detector.getClassificationSummary();
+            
+            // Log any field relationships found
+            const fieldsWithRelationships = fields.filter(f => 
+              f.classification && 
+              f.classification.relationships && 
+              f.classification.relationships.length > 0
+            );
+            
+            if (fieldsWithRelationships.length > 0) {
+              log(`Document body: Found ${fieldsWithRelationships.length} fields with relationships`);
+            }
+            
             // Add form to detection result for further analysis
             if (!detectionResult.forms) {
               detectionResult.forms = [];
@@ -772,7 +1709,15 @@ async function detectBusinessForm() {
               action: window.location.href,
               method: 'virtual',
               fieldCount: fields.length,
-              isImplicit: true
+              isImplicit: true,
+              fieldClassification: {
+                classifiedCount: classSummary.classifiedFields,
+                classificationRate: classSummary.classificationRate,
+                categories: classSummary.categories,
+                relationships: classSummary.relationships || {}
+              },
+              // Include export data for more detailed analysis if needed
+              detectionData: detector.exportDetectionData()
             });
             
             // Enable debug mode if a significant number of fields were found
@@ -787,6 +1732,98 @@ async function detectBusinessForm() {
         }
       } catch (fieldDetectionError) {
         reportError(fieldDetectionError, 'fieldDetection', false);
+      }
+      
+      // Update the overall field analysis summary
+      if (detectionResult.forms && detectionResult.forms.length > 0) {
+        try {
+          // Calculate total fields
+          let totalFields = 0;
+          let totalClassifiedFields = 0;
+          const businessFields = {};
+          
+          // Process each form's classification data
+          detectionResult.forms.forEach(form => {
+            if (!form.fieldClassification) return;
+            
+            totalFields += form.fieldCount;
+            totalClassifiedFields += form.fieldClassification.classifiedCount;
+            
+            // Merge categories from each form
+            if (form.fieldClassification.categories) {
+              Object.entries(form.fieldClassification.categories).forEach(([category, data]) => {
+                if (!businessFields[category]) {
+                  businessFields[category] = { count: 0, highConfidence: 0 };
+                }
+                businessFields[category].count += data.count;
+                businessFields[category].highConfidence += data.highConfidence;
+              });
+            }
+          });
+          
+          // Update the field analysis in the detection result
+          detectionResult.fieldAnalysis = {
+            fieldDetectionComplete: true,
+            totalFields,
+            classifiedFields: totalClassifiedFields,
+            classificationRate: totalFields > 0 ? Math.round((totalClassifiedFields / totalFields) * 100) : 0,
+            businessFields,
+            // Add relationship information to field analysis
+            relationships: {}
+          };
+          
+          // Aggregate relationship data from all forms
+          detectionResult.forms.forEach(form => {
+            if (form.fieldClassification && form.fieldClassification.relationships) {
+              const relationships = form.fieldClassification.relationships;
+              
+              // Merge relationships into the overall analysis
+              Object.entries(relationships).forEach(([relType, relData]) => {
+                if (!detectionResult.fieldAnalysis.relationships[relType]) {
+                  detectionResult.fieldAnalysis.relationships[relType] = {
+                    count: 0,
+                    categories: {}
+                  };
+                }
+                
+                // Increment count
+                detectionResult.fieldAnalysis.relationships[relType].count += relData.count;
+                
+                // Merge categories
+                Object.entries(relData.categories).forEach(([category, count]) => {
+                  if (!detectionResult.fieldAnalysis.relationships[relType].categories[category]) {
+                    detectionResult.fieldAnalysis.relationships[relType].categories[category] = 0;
+                  }
+                  detectionResult.fieldAnalysis.relationships[relType].categories[category] += count;
+                });
+              });
+            }
+          });
+          
+          // If we have significant field matches, increase confidence score
+          if (totalClassifiedFields > 5) {
+            const additionalConfidence = Math.min(10, totalClassifiedFields);
+            detectionResult.confidenceScore = Math.min(100, detectionResult.confidenceScore + additionalConfidence);
+            log(`Increased confidence score by ${additionalConfidence} based on field classification`);
+          }
+          
+          // Further increase confidence if we detected field relationships
+          const hasRelationships = Object.keys(detectionResult.fieldAnalysis.relationships).length > 0;
+          if (hasRelationships) {
+            const relationshipCount = Object.values(detectionResult.fieldAnalysis.relationships)
+              .reduce((sum, rel) => sum + rel.count, 0);
+            
+            const relationshipConfidence = Math.min(5, Math.floor(relationshipCount / 2));
+            if (relationshipConfidence > 0) {
+              detectionResult.confidenceScore = Math.min(100, detectionResult.confidenceScore + relationshipConfidence);
+              log(`Increased confidence score by ${relationshipConfidence} based on field relationships`);
+            }
+          }
+          
+          log('Final field analysis:', detectionResult.fieldAnalysis);
+        } catch (analysisError) {
+          reportError(analysisError, 'fieldAnalysisSummary', false);
+        }
       }
     }
     
@@ -1546,27 +2583,55 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   log('Message received:', message.action);
   
   try {
+    // Record this message in diagnostics
+    logDiagnostic('message_received', {
+      action: message.action,
+      messageId: message.messageId,
+      timestamp: new Date().toISOString(),
+      sender: sender.id ? { id: sender.id } : 'unknown'
+    });
+    
     // Mark that we have a connection
     connectionEstablished = true;
     connectionAttempts = 0;
     
     if (message.action === 'getDetectionResult') {
       // Return current detection
-      sendResponse(detectionResult || { 
+      const response = detectionResult || { 
         isBusinessRegistrationForm: false, 
         error: 'No detection result available',
         attempts: detectionAttempts,
         fallbackMode: fallbackDetectionMode
+      };
+      
+      // Log response
+      logDiagnostic('message_response', {
+        action: message.action,
+        responseType: detectionResult ? 'result' : 'no_result',
+        timestamp: new Date().toISOString()
       });
+      
+      sendResponse(response);
     }
     else if (message.action === 'triggerDetection') {
+      // Log this action
+      logDiagnostic('manual_detection', {
+        previousState: {
+          hadResult: !!detectionResult,
+          attempts: detectionAttempts,
+          fallbackMode: fallbackDetectionMode
+        }
+      });
+      
       // Reset detection state
       detectionResult = null;
       detectionAttempts = 0;
       fallbackDetectionMode = false; // Try normal mode again
       
       // Run detection again
-      tryDetection();
+      tryDetection('manual');
+      
+      // Send response
       sendResponse({ 
         success: true, 
         message: 'Detection triggered',
@@ -1574,22 +2639,50 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     }
     else if (message.action === 'getDetectionStatus') {
-      // Return current detection status
-      sendResponse({
+      // Prepare detailed status response
+      const statusResponse = {
         hasResult: !!detectionResult,
         attempts: detectionAttempts,
         maxAttempts: MAX_DETECTION_ATTEMPTS,
         documentReady: document.readyState,
+        documentStates: diagnostics.documentStates.slice(-3), // Last 3 states
         connectionEstablished: connectionEstablished,
         fallbackMode: fallbackDetectionMode,
-        errors: window.BRA_Errors || []
+        errors: window.BRA_Errors || [],
+        moduleStatus: {
+          urlDetector: !!URLDetector,
+          fieldDetector: !!FieldDetector
+        },
+        strategies: { ...detectionStrategies }
+      };
+      
+      // Log status check
+      logDiagnostic('status_request', {
+        hasResult: statusResponse.hasResult,
+        documentReady: statusResponse.documentReady
       });
+      
+      // Return current detection status
+      sendResponse(statusResponse);
     }
     else if (message.action === 'ping') {
+      // Check if this ping has diagnostic info
+      if (message.diagnosticInfo) {
+        // Store this info about the connection state from the background's perspective
+        diagnostics.backgroundPerspective = message.diagnosticInfo;
+        
+        logDiagnostic('ping_with_diagnostics', {
+          backgroundData: message.diagnosticInfo,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
       // Respond to ping with current status
       sendResponse({
         alive: true,
         timestamp: Date.now(),
+        messageId: message.messageId,
+        preDetection: message.preDetection,
         detectionStatus: {
           hasResult: !!detectionResult,
           attempts: detectionAttempts,
@@ -1600,6 +2693,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     else if (message.action === 'userFeedback') {
       // Process and store user feedback for adaptive learning
       if (message.feedback) {
+        logDiagnostic('user_feedback', {
+          feedback: message.feedback
+        });
+        
         updateDetectionHistory(message.feedback);
         sendResponse({
           success: true,
@@ -1611,6 +2708,67 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           error: 'Invalid feedback data'
         });
       }
+    }
+    else if (message.action === 'getDiagnostics') {
+      // Return full diagnostic information
+      sendResponse({
+        success: true,
+        diagnostics: diagnostics,
+        detectionStrategies: detectionStrategies,
+        detectionResult: detectionResult ? {
+          isBusinessRegistrationForm: detectionResult.isBusinessRegistrationForm,
+          confidenceScore: detectionResult.confidenceScore,
+          state: detectionResult.state,
+          formType: detectionResult.formType,
+          timestamp: detectionResult.timestamp,
+          fieldSummary: detectionResult.fieldAnalysis
+        } : null,
+        status: {
+          documentReady: document.readyState,
+          bodyExists: !!document.body,
+          connectionEstablished: connectionEstablished,
+          fallbackMode: fallbackDetectionMode,
+          attempts: detectionAttempts
+        },
+        modules: {
+          urlDetector: !!URLDetector,
+          fieldDetector: !!FieldDetector
+        }
+      });
+    }
+    else if (message.action === 'enableDebugMode') {
+      // Enable debug mode
+      window.BRA_DEBUG = true;
+      
+      logDiagnostic('debug_mode', {
+        enabled: true,
+        timestamp: new Date().toISOString()
+      });
+      
+      // If field detector exists, enable its debug mode too
+      if (FieldDetector) {
+        // Force redetection with debug mode if we have a form and a result
+        if (detectionResult && document.forms.length > 0) {
+          try {
+            const detector = new FieldDetector.default(document.forms[0], { debug: true });
+            detector.detectFields();
+            detector.classifyFields();
+            detector.highlightFields(false, {
+              showLabels: true,
+              showRelationships: true,
+              duration: 20000
+            });
+          } catch (debugError) {
+            console.error('[BRA] Error in debug mode field detection:', debugError);
+          }
+        }
+      }
+      
+      sendResponse({
+        success: true,
+        message: 'Debug mode enabled',
+        diagnosticsAvailable: true
+      });
     }
     else if (message.action === 'debugFieldDetection') {
       // Run field detection with debug mode enabled
@@ -1630,21 +2788,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           // Call additional detailed logging methods
           detector.logValidationStatus();
           
+          // Classify fields and get detailed analysis
+          const classificationResults = detector.classifyFields();
+          
           // Visual debugging - highlight fields on the page
           const shouldHighlight = message.highlight !== false; // Default to true
           if (shouldHighlight) {
-            detector.highlightFields();
+            // Use enhanced highlighting options
+            detector.highlightFields(false, {
+              showLabels: true,
+              showRelationships: true,
+              duration: 20000 // Longer duration for debug mode
+            });
           }
           
           sendResponse({
             success: true,
             message: `Debug field detection completed for form ${formIndex}`,
             fieldCount: fields.length,
+            classifiedCount: classificationResults.classifiedFields,
+            classificationRate: Math.round((classificationResults.classifiedFields / fields.length) * 100),
             formInfo: {
               id: formElement.id || null,
               action: formElement.action || null,
               method: formElement.method || 'get'
-            }
+            },
+            classification: detector.getClassificationSummary(),
+            detectionData: detector.exportDetectionData()
           });
         } else {
           // No forms, analyze body
@@ -1654,16 +2824,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           // Call additional detailed logging methods
           detector.logValidationStatus();
           
+          // Classify fields and get detailed analysis
+          const classificationResults = detector.classifyFields();
+          
           // Visual debugging - highlight fields on the page
           const shouldHighlight = message.highlight !== false; // Default to true
           if (shouldHighlight) {
-            detector.highlightFields();
+            // Use enhanced highlighting options
+            detector.highlightFields(false, {
+              showLabels: true,
+              showRelationships: true,
+              duration: 20000 // Longer duration for debug mode
+            });
           }
           
           sendResponse({
             success: true,
             message: 'Debug field detection completed for document body',
-            fieldCount: fields.length
+            fieldCount: fields.length,
+            classifiedCount: classificationResults.classifiedFields,
+            classificationRate: Math.round((classificationResults.classifiedFields / fields.length) * 100),
+            classification: detector.getClassificationSummary(),
+            detectionData: detector.exportDetectionData()
           });
         }
       } catch (error) {

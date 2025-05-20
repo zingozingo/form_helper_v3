@@ -7,9 +7,13 @@ This document details the implementation of the Business Registration Assistant 
 The Business Registration Assistant is built as a Chrome extension using Manifest V3. It consists of these main components:
 
 1. **Content Script (content.js)** - Runs on web pages to detect business registration forms and inject UI elements
-2. **Background Script (background.js)** - Manages extension state and coordinates between components
-3. **Sidebar UI (sidebar.html)** - Provides the form assistance interface
-4. **Styles (panel.css, sidebar.css)** - Contains styling for the UI components
+2. **Module System** - Specialized modules for field detection, URL analysis, and form classification
+   - **Field Detector (fieldDetector.js)** - Detects and classifies form fields
+   - **URL Detector (urlDetector.js)** - Analyzes URLs for business registration patterns
+3. **Background Script (background.js)** - Manages extension state and coordinates between components
+4. **Panel UI (panel.html)** - Provides the form assistance interface
+5. **Popup UI (popup.html)** - Quick access to detection results
+6. **Styles (panel.css, popup.css)** - Contains styling for the UI components
 
 ## Architecture Decisions
 
@@ -33,7 +37,19 @@ Form detection uses a multi-faceted analysis algorithm to identify business regi
 - URL Analysis: Checks domains, paths, and URL patterns
 - Content Analysis: Scans page text for business-related terminology
 - Form Analysis: Examines form fields for common business registration patterns
+- Field Classification: Categorizes form fields by their purpose in business registration
+- Relationship Detection: Identifies logical groups of related fields
 - State Identification: Detects which state the form is for (CA, NY, TX, FL, DE supported)
+
+### Field Classification System
+
+The field classification system is a sophisticated component that:
+- Analyzes field attributes (name, id, label, placeholder, etc.)
+- Matches attributes against a knowledge base of business form patterns
+- Assigns fields to specific business categories (business name, tax ID, etc.)
+- Calculates confidence scores for each classification
+- Detects relationships between fields forming logical groups
+- Enhances form detection confidence based on field analysis
 
 ### Error Handling Strategy
 
@@ -49,14 +65,29 @@ Comprehensive error handling is implemented across the extension:
 
 The content script is responsible for:
 1. Detecting if the current page is a business registration form
-2. Injecting the activation button and sidebar UI when appropriate
-3. Communicating with the sidebar iframe and background script
+2. Analyzing form fields and classifying their purpose
+3. Communicating with the panel UI and background script
+4. Handling detection errors and retries
 
 Key functions:
-- `detectBusinessForm()` - Analyzes the page using the FormDetector class
-- `showActivationButton()` - Creates and injects the floating activation button
-- `showSidebar()` - Creates and injects the sidebar UI
-- `setupSidebarCommunication()` - Establishes messaging with the sidebar iframe
+- `detectBusinessForm()` - Analyzes the page using URL, content and form analysis
+- `tryDetection()` - Manages detection attempts with retry logic
+- `analyzePageContent()` - Scans page text for business registration indicators
+- `analyzeFormElements()` - Examines form fields for registration patterns
+
+### Field Detector Module (fieldDetector.js)
+
+The field detector module provides advanced field analysis:
+1. Detects all form fields in a given element
+2. Extracts field properties and identifies labels
+3. Classifies fields into business registration categories
+4. Identifies relationships between fields
+
+Key features:
+- `detectFields()` - Finds all input elements and extracts their properties
+- `classifyFields()` - Categorizes fields by business purpose with confidence scores
+- `_detectFieldRelationships()` - Identifies logical groups of related fields
+- `highlightFields()` - Provides visual debugging of field classifications
 
 ### Background Script (background.js)
 
@@ -109,7 +140,20 @@ The extension is optimized for performance:
 ## Future Improvements
 
 Potential areas for enhancement:
+- UI integration with the field classification system
+- Auto-fill capabilities using classified field data
+- User feedback mechanism for improving classification accuracy
+- Expanded knowledge base for more field types and patterns
+- Adaptive learning system for classification improvement
 - Support for more states with specialized detection
-- Enhanced field detection for auto-fill capabilities
 - Offline storage of form requirements for faster loading
 - Machine learning-based detection for improved accuracy
+
+## Field Classification Integration
+
+The field classification system is designed for easy UI integration:
+- Classification data is included in form detection results
+- Relationship information is available for field grouping in the UI
+- Confidence scores can be used to prioritize which fields to auto-fill
+- Visual debugging tools can be integrated into the developer panel
+- Export functionality provides data for external analysis

@@ -1,207 +1,246 @@
 {
-  "entity_types": {
-    "llc": {
-      "name": "Limited Liability Company (LLC)",
-      "description": "A flexible business structure that combines the liability protection of a corporation with the tax benefits and simplicity of a partnership.",
-      "advantages": [
-        "Limited liability protection for all members",
-        "Pass-through taxation by default",
-        "Flexible management structure",
-        "Fewer formalities and paperwork than corporations",
-        "No restriction on number of owners",
-        "Flexible profit distribution"
-      ],
-      "disadvantages": [
-        "Self-employment taxes for active members",
-        "Potentially higher fees in some states",
-        "Less established legal precedent than corporations",
-        "May be more difficult to raise capital"
-      ],
-      "taxation": {
-        "default": "Pass-through (reported on owners' personal tax returns)",
-        "options": [
-          "Disregarded entity (single-member)",
-          "Partnership (multi-member)",
-          "S Corporation (requires election)",
-          "C Corporation (requires election)"
-        ]
+  "LLC": {
+    "fullName": "Limited Liability Company",
+    "description": "A business structure that combines the pass-through taxation of a partnership or sole proprietorship with the limited liability of a corporation.",
+    "availableStates": ["CA", "NY", "DE", "FL", "TX", "WA", "IL", "GA", "NC", "PA", "OH", "MI", "NJ", "VA", "MA", "AZ", "IN", "TN", "MO", "WI", "CO", "AL", "SC", "LA", "KY", "OR", "OK", "CT", "IA", "MS", "AR", "KS", "UT", "NV", "NM", "NE", "WV", "ID", "HI", "NH", "ME", "MT", "DE", "RI", "AK", "SD", "ND", "VT", "WY", "DC"],
+    "namingRequirements": {
+      "requiredSuffix": ["LLC", "L.L.C.", "Limited Liability Company"],
+      "prohibitedTerms": ["Bank", "Insurance", "Trust", "Corporation", "Inc"]
+    },
+    "requirements": {
+      "operatingAgreement": {
+        "required": true,
+        "description": "Document outlining the LLC's ownership and operating procedures"
       },
-      "management": {
-        "types": [
-          "Member-managed: All owners participate in management",
-          "Manager-managed: Designated managers (can be members or non-members) handle operations"
-        ]
-      },
-      "common_forms": {
-        "formation": "Articles of Organization / Certificate of Formation",
-        "governance": "Operating Agreement (internal document, typically not filed with state)"
+      "registeredAgent": {
+        "required": true,
+        "description": "Person or entity designated to receive legal documents"
       }
     },
-    "corporation": {
-      "name": "Corporation (C Corporation)",
-      "description": "A legal entity separate from its owners, providing the strongest liability protection but subject to more regulations and potential double taxation.",
-      "advantages": [
-        "Limited liability protection for all shareholders",
-        "Perpetual existence",
-        "Easier to raise capital through stock sales",
-        "Established legal precedent",
-        "Potential tax advantages for reinvested profits",
-        "More attractive to investors"
-      ],
-      "disadvantages": [
-        "Double taxation (corporate level and shareholder level)",
-        "More formalities and compliance requirements",
-        "Higher startup and maintenance costs",
-        "Less flexibility in management and profit distribution"
-      ],
-      "taxation": {
-        "default": "C Corporation (separate entity paying corporate tax rates)",
-        "options": [
-          "S Corporation (pass-through taxation, requires election and has ownership restrictions)"
-        ]
+    "filingRequirements": {
+      "CA": {
+        "formName": "Articles of Organization (LLC-1)",
+        "agency": "California Secretary of State",
+        "initialFee": 70,
+        "annualReport": "Statement of Information (LLC-12)",
+        "annualFee": 800
       },
-      "management": {
-        "structure": "Board of Directors oversees major decisions, Officers handle day-to-day operations, Shareholders own the company and elect the board"
+      "DE": {
+        "formName": "Certificate of Formation",
+        "agency": "Delaware Division of Corporations",
+        "initialFee": 90,
+        "annualReport": "Annual Report",
+        "annualFee": 300
       },
-      "common_forms": {
-        "formation": "Articles of Incorporation / Certificate of Incorporation",
-        "governance": "Bylaws (internal document, typically not filed with state)",
-        "meetings": "Meeting minutes and resolutions"
-      }
-    },
-    "s_corporation": {
-      "name": "S Corporation",
-      "description": "A corporation that elects to pass corporate income, losses, deductions, and credits through to shareholders for federal tax purposes.",
-      "advantages": [
-        "Limited liability protection for all shareholders",
-        "Pass-through taxation (avoids double taxation)",
-        "Potential tax savings on self-employment taxes",
-        "Separate legal entity with perpetual existence"
-      ],
-      "disadvantages": [
-        "Ownership restrictions (100 or fewer shareholders, only U.S. citizens/residents, etc.)",
-        "One class of stock allowed",
-        "More formalities than an LLC",
-        "All states may not recognize S corporation status"
-      ],
-      "taxation": {
-        "default": "Pass-through taxation to shareholders",
-        "special_rules": "Reasonable salary requirements for shareholder-employees"
+      "NY": {
+        "formName": "Articles of Organization",
+        "agency": "New York Department of State",
+        "initialFee": 200,
+        "annualReport": "Biennial Statement",
+        "annualFee": 9
       },
-      "management": {
-        "structure": "Same as C Corporation: Board of Directors, Officers, and Shareholders"
-      },
-      "common_forms": {
-        "formation": "Articles of Incorporation (same as C Corporation)",
-        "s_election": "Form 2553 (filed with IRS)"
-      }
-    },
-    "partnership": {
-      "name": "Partnership",
-      "description": "A business relationship where two or more people share ownership and operate the business together for profit.",
-      "types": {
-        "general_partnership": {
-          "name": "General Partnership (GP)",
-          "description": "Basic partnership where all partners share responsibility and liability.",
-          "liability": "Unlimited personal liability for all partners"
-        },
-        "limited_partnership": {
-          "name": "Limited Partnership (LP)",
-          "description": "Partnership with at least one general partner (with unlimited liability) and one or more limited partners (with limited liability).",
-          "liability": "General partners have unlimited liability; limited partners have liability limited to their investment"
-        },
-        "limited_liability_partnership": {
-          "name": "Limited Liability Partnership (LLP)",
-          "description": "Partnership where all partners have limited liability protection.",
-          "liability": "Partners are protected from personal liability for partnership debts and other partners' actions",
-          "common_uses": "Professional services (law firms, accounting firms, etc.)"
-        }
-      },
-      "advantages": [
-        "Easy and inexpensive to form",
-        "Pass-through taxation",
-        "Flexible management and profit-sharing",
-        "Limited regulatory requirements"
-      ],
-      "disadvantages": [
-        "Unlimited liability for general partners",
-        "Limited life (can terminate upon partner departure)",
-        "Potential for partner disputes",
-        "Difficulty raising capital"
-      ],
-      "taxation": {
-        "default": "Pass-through to partners' personal tax returns"
-      },
-      "common_forms": {
-        "formation": "Partnership Agreement (typically not filed with state)",
-        "registration": "Certificate of Limited Partnership (for LPs)"
-      }
-    },
-    "sole_proprietorship": {
-      "name": "Sole Proprietorship",
-      "description": "The simplest business structure where one individual owns and operates the business.",
-      "advantages": [
-        "Easiest and least expensive to form",
-        "Complete control by owner",
-        "Simple tax reporting on personal return",
-        "Minimal legal requirements",
-        "Easy to dissolve"
-      ],
-      "disadvantages": [
-        "Unlimited personal liability",
-        "Difficult to raise capital",
-        "Limited life (tied to owner's life/involvement)",
-        "Self-employment taxes"
-      ],
-      "taxation": {
-        "default": "Reported on owner's personal tax return (Schedule C)"
-      },
-      "common_forms": {
-        "registration": "Business License (local)",
-        "dba_filing": "Fictitious Business Name Statement / DBA (if operating under a name different from owner's legal name)"
+      "FL": {
+        "formName": "Articles of Organization",
+        "agency": "Florida Division of Corporations",
+        "initialFee": 125,
+        "annualReport": "Annual Report",
+        "annualFee": 138.75
       }
     }
   },
-  "choosing_factors": {
-    "liability_protection": {
-      "description": "Protection of personal assets from business debts and legal claims",
-      "rankings": {
-        "best": ["LLC", "Corporation", "LLP"],
-        "moderate": ["LP (for limited partners)"],
-        "none": ["Sole Proprietorship", "General Partnership (for general partners)"]
+  "C-Corp": {
+    "fullName": "C Corporation",
+    "description": "A legal structure for a company in which the owners, or shareholders, are taxed separately from the entity.",
+    "availableStates": ["CA", "NY", "DE", "FL", "TX", "WA", "IL", "GA", "NC", "PA", "OH", "MI", "NJ", "VA", "MA", "AZ", "IN", "TN", "MO", "WI", "CO", "AL", "SC", "LA", "KY", "OR", "OK", "CT", "IA", "MS", "AR", "KS", "UT", "NV", "NM", "NE", "WV", "ID", "HI", "NH", "ME", "MT", "DE", "RI", "AK", "SD", "ND", "VT", "WY", "DC"],
+    "namingRequirements": {
+      "requiredSuffix": ["Corporation", "Incorporated", "Inc.", "Corp."],
+      "prohibitedTerms": ["Bank", "Insurance", "Trust", "LLC", "L.L.C."]
+    },
+    "requirements": {
+      "bylaws": {
+        "required": true,
+        "description": "Rules and regulations for the corporation's internal management"
+      },
+      "boardOfDirectors": {
+        "required": true,
+        "description": "Governing body of the corporation"
+      },
+      "registeredAgent": {
+        "required": true,
+        "description": "Person or entity designated to receive legal documents"
       }
     },
-    "tax_considerations": {
-      "description": "How business profits and losses are taxed",
-      "options": {
-        "pass_through": ["Sole Proprietorship", "Partnership", "LLC", "S Corporation"],
-        "double_taxation": ["C Corporation"],
-        "flexible": ["LLC (can choose tax treatment)"]
+    "filingRequirements": {
+      "CA": {
+        "formName": "Articles of Incorporation",
+        "agency": "California Secretary of State",
+        "initialFee": 100,
+        "annualReport": "Statement of Information (SI-200)",
+        "annualFee": 25
+      },
+      "DE": {
+        "formName": "Certificate of Incorporation",
+        "agency": "Delaware Division of Corporations",
+        "initialFee": 89,
+        "annualReport": "Annual Report and Franchise Tax",
+        "annualFee": "variable"
+      },
+      "NY": {
+        "formName": "Certificate of Incorporation",
+        "agency": "New York Department of State",
+        "initialFee": 125,
+        "annualReport": "Biennial Statement",
+        "annualFee": 9
+      }
+    }
+  },
+  "S-Corp": {
+    "fullName": "S Corporation",
+    "description": "A corporation that elects to pass corporate income, losses, deductions, and credits through to their shareholders for federal tax purposes.",
+    "availableStates": ["CA", "NY", "DE", "FL", "TX", "WA", "IL", "GA", "NC", "PA", "OH", "MI", "NJ", "VA", "MA", "AZ", "IN", "TN", "MO", "WI", "CO", "AL", "SC", "LA", "KY", "OR", "OK", "CT", "IA", "MS", "AR", "KS", "UT", "NV", "NM", "NE", "WV", "ID", "HI", "NH", "ME", "MT", "DE", "RI", "AK", "SD", "ND", "VT", "WY", "DC"],
+    "namingRequirements": {
+      "requiredSuffix": ["Corporation", "Incorporated", "Inc.", "Corp."],
+      "prohibitedTerms": ["Bank", "Insurance", "Trust", "LLC", "L.L.C."]
+    },
+    "requirements": {
+      "bylaws": {
+        "required": true,
+        "description": "Rules and regulations for the corporation's internal management"
+      },
+      "boardOfDirectors": {
+        "required": true,
+        "description": "Governing body of the corporation"
+      },
+      "registeredAgent": {
+        "required": true,
+        "description": "Person or entity designated to receive legal documents"
+      },
+      "shareholderLimit": {
+        "required": true,
+        "description": "Maximum of 100 shareholders, must be US citizens/residents"
       }
     },
-    "ease_of_formation": {
-      "description": "Complexity and cost of creating the business entity",
-      "rankings": {
-        "easiest": ["Sole Proprietorship"],
-        "moderate": ["General Partnership", "LLC"],
-        "more_complex": ["LP", "LLP", "Corporation"]
+    "filingRequirements": {
+      "CA": {
+        "formName": "Articles of Incorporation",
+        "agency": "California Secretary of State",
+        "initialFee": 100,
+        "annualReport": "Statement of Information (SI-200)",
+        "annualFee": 25,
+        "additionalFiling": "IRS Form 2553"
+      }
+    }
+  },
+  "Sole Proprietorship": {
+    "fullName": "Sole Proprietorship",
+    "description": "An unincorporated business with a single owner who pays personal income tax on profits from the business.",
+    "availableStates": ["CA", "NY", "DE", "FL", "TX", "WA", "IL", "GA", "NC", "PA", "OH", "MI", "NJ", "VA", "MA", "AZ", "IN", "TN", "MO", "WI", "CO", "AL", "SC", "LA", "KY", "OR", "OK", "CT", "IA", "MS", "AR", "KS", "UT", "NV", "NM", "NE", "WV", "ID", "HI", "NH", "ME", "MT", "DE", "RI", "AK", "SD", "ND", "VT", "WY", "DC"],
+    "namingRequirements": {
+      "requiredSuffix": [],
+      "prohibitedTerms": ["LLC", "Inc", "Corp", "Corporation", "Incorporated", "Limited"]
+    },
+    "requirements": {
+      "dbaTradeName": {
+        "required": false,
+        "description": "Filing for doing business under a name other than the owner's legal name"
       }
     },
-    "ongoing_requirements": {
-      "description": "Compliance obligations after formation",
-      "rankings": {
-        "minimal": ["Sole Proprietorship", "General Partnership"],
-        "moderate": ["LLC"],
-        "extensive": ["Corporation", "S Corporation"]
+    "filingRequirements": {
+      "CA": {
+        "formName": "Fictitious Business Name Statement (if using a business name)",
+        "agency": "County Clerk's Office",
+        "initialFee": "varies by county",
+        "annualReport": "None",
+        "annualFee": 0
+      }
+    }
+  },
+  "Partnership": {
+    "fullName": "General Partnership",
+    "description": "An arrangement where two or more persons agree to share in all profits, losses and assets of a business.",
+    "availableStates": ["CA", "NY", "DE", "FL", "TX", "WA", "IL", "GA", "NC", "PA", "OH", "MI", "NJ", "VA", "MA", "AZ", "IN", "TN", "MO", "WI", "CO", "AL", "SC", "LA", "KY", "OR", "OK", "CT", "IA", "MS", "AR", "KS", "UT", "NV", "NM", "NE", "WV", "ID", "HI", "NH", "ME", "MT", "DE", "RI", "AK", "SD", "ND", "VT", "WY", "DC"],
+    "namingRequirements": {
+      "requiredSuffix": [],
+      "prohibitedTerms": ["LLC", "Inc", "Corp", "Corporation", "Incorporated", "Limited"]
+    },
+    "requirements": {
+      "partnershipAgreement": {
+        "required": true,
+        "description": "Document outlining the partnership's management and ownership"
       }
     },
-    "raising_capital": {
-      "description": "Ability to attract investment and funding",
-      "rankings": {
-        "best": ["C Corporation"],
-        "good": ["S Corporation (with limitations)", "LLC"],
-        "limited": ["LP"],
-        "difficult": ["Sole Proprietorship", "General Partnership"]
+    "filingRequirements": {
+      "CA": {
+        "formName": "Statement of Partnership Authority (optional)",
+        "agency": "California Secretary of State",
+        "initialFee": 70,
+        "annualReport": "None",
+        "annualFee": 0
+      }
+    }
+  },
+  "LLP": {
+    "fullName": "Limited Liability Partnership",
+    "description": "A partnership where some or all partners have limited liability, providing protection from certain liabilities.",
+    "availableStates": ["CA", "NY", "DE", "FL", "TX", "IL", "PA", "MI", "NJ", "VA", "MA"],
+    "namingRequirements": {
+      "requiredSuffix": ["LLP", "L.L.P.", "Limited Liability Partnership"],
+      "prohibitedTerms": ["LLC", "Inc", "Corp", "Corporation", "Limited"]
+    },
+    "requirements": {
+      "partnershipAgreement": {
+        "required": true,
+        "description": "Document outlining the partnership's management and ownership"
+      },
+      "registeredAgent": {
+        "required": true,
+        "description": "Person or entity designated to receive legal documents"
+      }
+    },
+    "filingRequirements": {
+      "CA": {
+        "formName": "Application to Register as a Limited Liability Partnership (LLP-1)",
+        "agency": "California Secretary of State",
+        "initialFee": 70,
+        "annualReport": "Annual Report",
+        "annualFee": 800
+      }
+    }
+  },
+  "Nonprofit": {
+    "fullName": "Nonprofit Corporation",
+    "description": "A corporation organized for purposes other than generating profit, typically with a public benefit purpose.",
+    "availableStates": ["CA", "NY", "DE", "FL", "TX", "WA", "IL", "GA", "NC", "PA", "OH", "MI", "NJ", "VA", "MA", "AZ", "IN", "TN", "MO", "WI", "CO", "AL", "SC", "LA", "KY", "OR", "OK", "CT", "IA", "MS", "AR", "KS", "UT", "NV", "NM", "NE", "WV", "ID", "HI", "NH", "ME", "MT", "DE", "RI", "AK", "SD", "ND", "VT", "WY", "DC"],
+    "namingRequirements": {
+      "requiredSuffix": ["Corporation", "Incorporated", "Inc.", "Corp."],
+      "prohibitedTerms": ["Bank", "Insurance", "Trust", "LLC", "L.L.C."]
+    },
+    "requirements": {
+      "bylaws": {
+        "required": true,
+        "description": "Rules and regulations for the nonprofit's internal management"
+      },
+      "boardOfDirectors": {
+        "required": true,
+        "description": "Governing body of the nonprofit"
+      },
+      "registeredAgent": {
+        "required": true,
+        "description": "Person or entity designated to receive legal documents"
+      },
+      "purpose": {
+        "required": true,
+        "description": "Statement of charitable, educational, religious, or scientific purpose"
+      }
+    },
+    "filingRequirements": {
+      "CA": {
+        "formName": "Articles of Incorporation of a Nonprofit Corporation",
+        "agency": "California Secretary of State",
+        "initialFee": 30,
+        "annualReport": "Statement of Information (SI-100)",
+        "annualFee": 20,
+        "additionalFiling": "IRS Form 1023 for 501(c)(3) status"
       }
     }
   }

@@ -1,0 +1,11 @@
+# Business Registration Form Helper Requirements
+
+# Core dependencies
+argparse>=1.4
+regex>=2021.8.3
+typing-extensions>=4.0.0
+
+# Only required for PDF output (not included in current implementation)
+# reportlab>=3.6.1
+# For future implementation of CSV data handling
+# pandas>=1.3.3

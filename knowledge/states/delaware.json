@@ -1,100 +1,118 @@
 {
-  "state_code": "DE",
-  "state_name": "Delaware",
-  "business_registration": {
-    "governing_agency": "Delaware Division of Corporations",
-    "website": "https://corp.delaware.gov/",
-    "urls": {
-      "main": "https://corp.delaware.gov/",
-      "llc_formation": "https://corp.delaware.gov/llcform/",
-      "corporation_formation": "https://corp.delaware.gov/corpform/",
-      "online_filing": "https://icis.corp.delaware.gov/Ecorp/EntitySearch/NameSearch.aspx"
+  "stateCode": "DE",
+  "stateName": "Delaware",
+  "businessFilingAgency": "Delaware Division of Corporations",
+  "businessFilingWebsite": "https://corp.delaware.gov/",
+  "taxAgency": "Delaware Division of Revenue",
+  "taxWebsite": "https://revenue.delaware.gov/",
+  "requiredFields": [
+    "businessName",
+    "entityType",
+    "registeredAgent",
+    "contactEmail"
+  ],
+  "validationRules": {
+    "businessName": {
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[A-Za-z0-9\\s\\&\\.,\\-'\\(\\)\\+]+$",
+      "errorMessage": "Business name can only contain letters, numbers, spaces, and these characters: & . , - ' ( ) +"
     },
-    "forms": {
-      "llc": {
-        "main_form": "Certificate of Formation",
-        "filing_fee": 90,
-        "processing_time": "Standard: 10-15 business days, Expedited: Same day, 24-hour, or 2-hour service available for additional fees",
-        "annual_filing": "Annual Franchise Tax Report - Due by June 1",
-        "annual_fee": "Minimum $300 annual franchise tax"
-      },
-      "corporation": {
-        "main_form": "Certificate of Incorporation",
-        "filing_fee": 89,
-        "processing_time": "Standard: 10-15 business days, Expedited: Same day, 24-hour, or 2-hour service available for additional fees",
-        "annual_filing": "Annual Franchise Tax Report - Due by March 1",
-        "annual_fee": "Minimum $175 annual franchise tax based on authorized shares"
-      },
-      "partnership": {
-        "main_form": "Certificate of Limited Partnership",
-        "filing_fee": 200,
-        "processing_time": "Standard: 10-15 business days, Expedited: Same day, 24-hour, or 2-hour service available for additional fees",
-        "annual_filing": "Annual Franchise Tax Report - Due by June 1",
-        "annual_fee": 300
+    "contactEmail": {
+      "pattern": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$",
+      "errorMessage": "Invalid email format"
+    },
+    "contactPhone": {
+      "pattern": "^\\(?([0-9]{3})\\)?[-. ]?([0-9]{3})[-. ]?([0-9]{4})$",
+      "errorMessage": "Phone must be 10 digits in format XXX-XXX-XXXX"
+    },
+    "zipCode": {
+      "pattern": "^(19[7-9]\\d{2})$",
+      "errorMessage": "Delaware ZIP codes must start with 19 and be 5 digits"
+    }
+  },
+  "formattingRules": {
+    "businessName": {
+      "toTitleCase": true
+    },
+    "address": {
+      "replacements": {
+        "(?i)\\bDelaware\\b": "DE",
+        "(?i)\\bSuite\\s+": "Ste ",
+        "(?i)\\bApartment\\s+": "Apt ",
+        "(?i)\\bStreet\\b": "St",
+        "(?i)\\bAvenue\\b": "Ave",
+        "(?i)\\bBoulevard\\b": "Blvd",
+        "(?i)\\bRoad\\b": "Rd"
       }
     },
-    "requirements": {
-      "registered_agent": {
-        "required": true,
-        "description": "All entities must designate a registered agent with a physical Delaware address."
-      },
-      "publication": {
-        "required": false,
-        "description": "No publication requirement in Delaware."
-      },
-      "naming_conventions": {
-        "llc": {
-          "required_terms": ["LLC", "L.L.C.", "Limited Liability Company"],
-          "prohibited_terms": ["Bank", "Trust", "University", "College", "Insurance"]
-        },
-        "corporation": {
-          "required_terms": ["Association", "Company", "Corporation", "Club", "Foundation", "Fund", "Incorporated", "Institute", "Society", "Union", "Syndicate", "Limited", "Inc.", "Corp."],
-          "prohibited_terms": ["Bank", "Trust", "University", "College", "Insurance"]
-        }
-      }
-    },
-    "additional_filings": {
-      "business_license": {
-        "required": true,
-        "description": "State business license required for all businesses operating in Delaware.",
-        "authority": "Delaware Division of Revenue"
-      },
-      "employer_requirements": {
-        "ein": {
-          "required": true,
-          "description": "Federal Employer Identification Number required for all entities except sole proprietorships with no employees.",
-          "authority": "Internal Revenue Service"
-        },
-        "delaware_withholding": {
-          "required": "Conditional",
-          "description": "Registration for withholding required if hiring employees.",
-          "authority": "Delaware Division of Revenue"
-        }
+    "contactPhone": {
+      "replacements": {
+        "[^0-9]": "",
+        "^(\\d{3})(\\d{3})(\\d{4})$": "($1) $2-$3"
       }
     }
   },
-  "form_field_guidance": {
-    "common_fields": {
-      "entity_name": {
-        "description": "The official name of your business entity.",
-        "tips": "Must include required designation (LLC, Inc., etc.). Check availability on DE Division of Corporations website before filing."
-      },
-      "business_purpose": {
-        "description": "Statement of what the business will do.",
-        "tips": "Can be general (e.g., 'any lawful act or activity for which corporations may be organized')."
-      },
-      "registered_agent": {
-        "description": "Person or entity designated to receive legal documents.",
-        "tips": "Must have a physical DE address. Most businesses use a registered agent service since they don't have a physical presence in Delaware."
-      },
-      "authorized_shares": {
-        "description": "For corporations, the number of shares the company is authorized to issue.",
-        "tips": "Affects annual franchise tax. Consider using the minimum (1,500 for minimum tax) unless you have specific capitalization needs."
-      },
-      "par_value": {
-        "description": "The nominal or face value of a share.",
-        "tips": "Can be any value or 'no par'. Lower par values often result in lower franchise taxes."
-      }
+  "filingFees": {
+    "LLC": {
+      "formation": 90,
+      "annualReport": 300
+    },
+    "C-Corp": {
+      "formation": 89,
+      "annualReport": "Varies by authorized shares"
+    },
+    "S-Corp": {
+      "formation": 89,
+      "annualReport": "Varies by authorized shares"
+    },
+    "Nonprofit": {
+      "formation": 89,
+      "annualReport": 25
+    },
+    "LLP": {
+      "formation": 200,
+      "annualReport": 200
     }
+  },
+  "fileDueDates": {
+    "LLC": {
+      "annualReport": "June 1",
+      "taxReturn": "April 15"
+    },
+    "Corporation": {
+      "annualReport": "March 1",
+      "franchiseTax": "March 1"
+    }
+  },
+  "specialRequirements": {
+    "registeredAgent": "Must maintain a registered agent with a physical address in Delaware",
+    "businessLicenses": "State business license required for all businesses",
+    "outOfStateBusinesses": "Non-Delaware address is acceptable for principal business address",
+    "employerRequirements": [
+      "Register with Division of Revenue",
+      "Obtain unemployment insurance",
+      "Workers' compensation insurance required for employees"
+    ]
+  },
+  "filingMethods": {
+    "online": {
+      "available": true,
+      "url": "https://icis.corp.delaware.gov/ecorp/index.jsp"
+    },
+    "mail": {
+      "available": true,
+      "address": "Delaware Division of Corporations\n401 Federal Street, Suite 4\nDover, DE 19901"
+    },
+    "fax": {
+      "available": true,
+      "number": "302-739-3812"
+    }
+  },
+  "advantages": {
+    "corporateLaw": "Business-friendly corporate law structure",
+    "courtSystem": "Specialized Court of Chancery for business disputes",
+    "privacy": "Minimal disclosure requirements for ownership",
+    "taxBenefits": "No state corporate income tax on companies formed in Delaware that do not conduct business in Delaware"
   }
 }

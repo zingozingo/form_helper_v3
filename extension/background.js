@@ -11,6 +11,13 @@ const detectionErrors = {};
 const connectedTabs = {};
 const tabLastPingTime = {};
 
+// Track reconnection attempts
+const reconnectionAttempts = {};
+const MAX_RECONNECTION_ATTEMPTS = 3;
+
+// Track detailed diagnostic information for troubleshooting
+const tabDiagnostics = {};
+
 // Update badge when a form is detected
 function updateBadge(tabId, isDetected, confidenceScore = 0, hasError = false) {
   try {
@@ -60,12 +67,153 @@ function shouldNotifyError(tabId, context) {
 }
 
 /**
+ * Log diagnostic information for troubleshooting
+ * @param {number} tabId - The tab ID
+ * @param {string} category - The diagnostic category
+ * @param {Object} data - The diagnostic data
+ */
+function logDiagnostic(tabId, category, data) {
+  if (!tabDiagnostics[tabId]) {
+    tabDiagnostics[tabId] = {
+      history: [],
+      categories: {}
+    };
+  }
+  
+  // Add timestamp
+  const entry = {
+    timestamp: new Date().toISOString(),
+    category,
+    data
+  };
+  
+  // Store in history
+  tabDiagnostics[tabId].history.push(entry);
+  
+  // Limit history to last 50 entries
+  if (tabDiagnostics[tabId].history.length > 50) {
+    tabDiagnostics[tabId].history.shift();
+  }
+  
+  // Store in category-specific data
+  if (!tabDiagnostics[tabId].categories[category]) {
+    tabDiagnostics[tabId].categories[category] = [];
+  }
+  
+  tabDiagnostics[tabId].categories[category].push(entry);
+  
+  // Limit category-specific history to last 10 entries
+  if (tabDiagnostics[tabId].categories[category].length > 10) {
+    tabDiagnostics[tabId].categories[category].shift();
+  }
+  
+  console.log(`[BRA] Diagnostic [${category}]:`, data);
+}
+
+/**
  * Check if a tab is still connected
  * @param {number} tabId - The tab ID to check
  * @returns {boolean} Whether the tab is connected
  */
 function isTabConnected(tabId) {
   return connectedTabs[tabId] && (Date.now() - tabLastPingTime[tabId] < 60000); // 1 minute timeout
+}
+
+/**
+ * Try to reconnect to a tab
+ * @param {number} tabId - The tab ID to reconnect to
+ * @returns {Promise} Resolves if successful, rejects if failed
+ */
+async function attemptReconnection(tabId) {
+  // Initialize reconnection counter if not exists
+  if (reconnectionAttempts[tabId] === undefined) {
+    reconnectionAttempts[tabId] = 0;
+  }
+  
+  // If we've exceeded max attempts, fail
+  if (reconnectionAttempts[tabId] >= MAX_RECONNECTION_ATTEMPTS) {
+    logDiagnostic(tabId, 'reconnection', {
+      status: 'failed',
+      attempts: reconnectionAttempts[tabId],
+      reason: 'Maximum attempts exceeded'
+    });
+    return Promise.reject(new Error('Maximum reconnection attempts exceeded'));
+  }
+  
+  // Increment attempt counter
+  reconnectionAttempts[tabId]++;
+  
+  try {
+    // Try to retrieve tab info
+    const tab = await chrome.tabs.get(tabId);
+    
+    // Check if the tab still exists
+    if (!tab) {
+      logDiagnostic(tabId, 'reconnection', {
+        status: 'failed',
+        attempts: reconnectionAttempts[tabId],
+        reason: 'Tab no longer exists'
+      });
+      return Promise.reject(new Error('Tab no longer exists'));
+    }
+    
+    // Check if the tab is in a state we can inject scripts into
+    if (!tab.url || !tab.url.startsWith('http')) {
+      logDiagnostic(tabId, 'reconnection', {
+        status: 'failed',
+        attempts: reconnectionAttempts[tabId],
+        reason: 'Tab URL not supported',
+        url: tab.url
+      });
+      return Promise.reject(new Error('Tab URL not supported for content scripts'));
+    }
+    
+    // Try to ping first
+    try {
+      const pingResponse = await pingTab(tabId);
+      // If ping succeeds, we're already connected
+      logDiagnostic(tabId, 'reconnection', {
+        status: 'success',
+        attempts: reconnectionAttempts[tabId],
+        method: 'ping'
+      });
+      return pingResponse;
+    } catch (pingError) {
+      // Ping failed, try to inject content script again
+      logDiagnostic(tabId, 'reconnection', {
+        status: 'ping_failed',
+        error: pingError.message,
+        attempts: reconnectionAttempts[tabId]
+      });
+      
+      // Try to re-inject content script
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ['content.js']
+      });
+      
+      // Wait a moment for script to initialize
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Try ping again after injection
+      const postInjectPing = await pingTab(tabId);
+      
+      logDiagnostic(tabId, 'reconnection', {
+        status: 'success',
+        attempts: reconnectionAttempts[tabId],
+        method: 'script_injection'
+      });
+      
+      return postInjectPing;
+    }
+  } catch (error) {
+    logDiagnostic(tabId, 'reconnection', {
+      status: 'failed',
+      error: error.message,
+      attempts: reconnectionAttempts[tabId]
+    });
+    return Promise.reject(error);
+  }
 }
 
 /**
@@ -76,19 +224,57 @@ function isTabConnected(tabId) {
 function pingTab(tabId) {
   return new Promise((resolve, reject) => {
     try {
-      chrome.tabs.sendMessage(tabId, { action: 'ping', timestamp: Date.now() }, function(response) {
+      chrome.tabs.sendMessage(tabId, { 
+        action: 'ping', 
+        timestamp: Date.now(),
+        diagnosticInfo: {
+          hasDetectionResult: !!detectionResults[tabId],
+          hasErrors: !!(detectionErrors[tabId] && detectionErrors[tabId].length > 0),
+          reconnectionAttempts: reconnectionAttempts[tabId] || 0
+        }
+      }, function(response) {
         if (chrome.runtime.lastError) {
           console.warn('[BRA] Ping error:', chrome.runtime.lastError.message);
+          
+          logDiagnostic(tabId, 'ping', {
+            status: 'failed',
+            error: chrome.runtime.lastError.message
+          });
+          
           reject(chrome.runtime.lastError);
         } else if (response && response.alive) {
           connectedTabs[tabId] = true;
           tabLastPingTime[tabId] = Date.now();
+          
+          // If we've previously attempted reconnection, reset the counter
+          if (reconnectionAttempts[tabId]) {
+            reconnectionAttempts[tabId] = 0;
+          }
+          
+          logDiagnostic(tabId, 'ping', {
+            status: 'success',
+            response: {
+              detectionStatus: response.detectionStatus || 'unknown'
+            }
+          });
+          
           resolve(response);
         } else {
+          logDiagnostic(tabId, 'ping', {
+            status: 'failed',
+            error: 'Invalid response',
+            response
+          });
+          
           reject(new Error('Invalid ping response'));
         }
       });
     } catch (e) {
+      logDiagnostic(tabId, 'ping', {
+        status: 'failed',
+        error: e.message
+      });
+      
       reject(e);
     }
   });
@@ -98,15 +284,54 @@ function pingTab(tabId) {
 setInterval(() => {
   chrome.tabs.query({}, function(tabs) {
     if (chrome.runtime.lastError) {
+      console.warn('[BRA] Error querying tabs:', chrome.runtime.lastError.message);
       return;
     }
     
     // Check connection for each tab
     tabs.forEach(tab => {
-      if (connectedTabs[tab.id] && tab.id && tab.url && tab.url.startsWith('http')) {
-        pingTab(tab.id).catch(() => {
-          // If ping fails, mark tab as disconnected
-          connectedTabs[tab.id] = false;
+      // Only check tabs that have been connected or have detection results/errors
+      if ((connectedTabs[tab.id] || detectionResults[tab.id] || detectionErrors[tab.id]) && 
+          tab.id && tab.url && tab.url.startsWith('http')) {
+        
+        // Log tab status check
+        logDiagnostic(tab.id, 'connection_check', {
+          url: tab.url,
+          title: tab.title,
+          status: tab.status,
+          isConnected: !!connectedTabs[tab.id],
+          hasDetectionResult: !!detectionResults[tab.id]
+        });
+        
+        // Try to ping the tab
+        pingTab(tab.id).catch(error => {
+          console.warn(`[BRA] Tab ${tab.id} appears disconnected:`, error.message);
+          
+          // If ping fails, try to reconnect
+          if (connectedTabs[tab.id]) {
+            logDiagnostic(tab.id, 'connection_lost', {
+              previouslyConnected: true,
+              error: error.message
+            });
+            
+            // Mark as disconnected
+            connectedTabs[tab.id] = false;
+            
+            // Attempt to reconnect
+            attemptReconnection(tab.id).then(() => {
+              console.log(`[BRA] Successfully reconnected to tab ${tab.id}`);
+              
+              // If we have a detection result, try to trigger detection again
+              if (detectionResults[tab.id]) {
+                chrome.tabs.sendMessage(tab.id, {
+                  action: 'triggerDetection',
+                  retry: true
+                }).catch(e => console.warn('[BRA] Failed to trigger detection after reconnection:', e.message));
+              }
+            }).catch(reconnectError => {
+              console.error(`[BRA] Failed to reconnect to tab ${tab.id}:`, reconnectError.message);
+            });
+          }
         });
       }
     });
@@ -126,11 +351,49 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   
   // Handle ping from content script
   if (message.action === 'ping') {
-    sendResponse({
+    const pingResponse = {
       alive: true,
+      timestamp: Date.now(),
+      messageId: message.messageId,
+      // Add more diagnostic info for better transparency
+      serviceWorkerStatus: 'active',
+      hasDetectionResult: tabId ? !!detectionResults[tabId] : false,
+      hasErrors: tabId ? !!(detectionErrors[tabId] && detectionErrors[tabId].length > 0) : false
+    };
+    
+    // Log ping in diagnostics
+    if (tabId) {
+      logDiagnostic(tabId, 'ping_received', {
+        timestamp: Date.now(),
+        messageId: message.messageId,
+        preDetection: !!message.preDetection
+      });
+    }
+    
+    sendResponse(pingResponse);
+    return true;
+  }
+  
+  // Handle reconnection request from content script
+  if (message.action === 'reconnect' && tabId) {
+    // Reset reconnection state for this tab
+    connectedTabs[tabId] = true;
+    tabLastPingTime[tabId] = Date.now();
+    
+    // Log reconnection attempt in diagnostics
+    logDiagnostic(tabId, 'reconnection_request', {
       timestamp: Date.now(),
       messageId: message.messageId
     });
+    
+    // Send positive response to content script
+    sendResponse({
+      alive: true,
+      reconnected: true,
+      timestamp: Date.now(),
+      messageId: message.messageId
+    });
+    
     return true;
   }
   
@@ -272,11 +535,112 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
   }
   
+  // Provide diagnostic information
+  if (message.action === 'getDiagnostics') {
+    const requestedTabId = message.tabId || tabId;
+    
+    if (requestedTabId) {
+      // Gather comprehensive diagnostic information
+      const diagnosticInfo = {
+        tabInfo: {
+          id: requestedTabId,
+          connected: isTabConnected(requestedTabId),
+          hasDetectionResult: !!detectionResults[requestedTabId],
+          hasErrors: !!(detectionErrors[requestedTabId] && detectionErrors[requestedTabId].length > 0),
+          reconnectionAttempts: reconnectionAttempts[requestedTabId] || 0,
+          lastPingTime: tabLastPingTime[requestedTabId] ? new Date(tabLastPingTime[requestedTabId]).toISOString() : null
+        },
+        logs: tabDiagnostics[requestedTabId] || { history: [], categories: {} },
+        detectionResult: detectionResults[requestedTabId] || null,
+        errors: detectionErrors[requestedTabId] || []
+      };
+      
+      // Add browser info
+      chrome.runtime.getBrowserInfo().then(browserInfo => {
+        diagnosticInfo.browser = browserInfo;
+        
+        // Add system info if available
+        if (chrome.system && chrome.system.cpu) {
+          chrome.system.cpu.getInfo(cpuInfo => {
+            diagnosticInfo.system = { cpu: cpuInfo };
+            
+            sendResponse({
+              success: true,
+              diagnostics: diagnosticInfo
+            });
+          });
+        } else {
+          sendResponse({
+            success: true,
+            diagnostics: diagnosticInfo
+          });
+        }
+      }).catch(error => {
+        diagnosticInfo.browserInfoError = error.message;
+        
+        sendResponse({
+          success: true,
+          diagnostics: diagnosticInfo
+        });
+      });
+      
+      // Return true to indicate we'll call sendResponse asynchronously
+      return true;
+    } else {
+      sendResponse({
+        success: false,
+        error: 'No tab ID specified'
+      });
+    }
+  }
+  
+  // Allow manual reconnection attempts
+  if (message.action === 'reconnect') {
+    const requestedTabId = message.tabId || tabId;
+    
+    if (requestedTabId) {
+      // Reset reconnection counters for a fresh attempt
+      reconnectionAttempts[requestedTabId] = 0;
+      
+      attemptReconnection(requestedTabId).then(result => {
+        sendResponse({
+          success: true,
+          reconnected: true,
+          result
+        });
+      }).catch(error => {
+        sendResponse({
+          success: false,
+          reconnected: false,
+          error: error.message
+        });
+      });
+      
+      // Return true to indicate we'll call sendResponse asynchronously
+      return true;
+    } else {
+      sendResponse({
+        success: false,
+        error: 'No tab ID specified'
+      });
+    }
+  }
+  
   return true; // Keep message channel open
 });
 
 // Clean up when tabs are closed
 chrome.tabs.onRemoved.addListener((tabId) => {
+  // Log the tab removal for diagnostics
+  logDiagnostic(tabId, 'tab_closed', {
+    hadDetectionResult: !!detectionResults[tabId],
+    hadErrors: !!(detectionErrors[tabId] && detectionErrors[tabId].length > 0),
+    wasConnected: !!connectedTabs[tabId]
+  });
+  
+  // Move diagnostic data to a temporary storage to avoid losing info immediately
+  const tabDiagnostic = tabDiagnostics[tabId];
+  
   // Remove stored data for this tab
   if (detectionResults[tabId]) {
     delete detectionResults[tabId];
@@ -297,6 +661,24 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   
   if (tabLastPingTime[tabId]) {
     delete tabLastPingTime[tabId];
+  }
+  
+  if (reconnectionAttempts[tabId]) {
+    delete reconnectionAttempts[tabId];
+  }
+  
+  // Keep diagnostic data for a delayed cleanup (useful for debugging)
+  if (tabDiagnostics[tabId]) {
+    // Mark as closed in the diagnostic data
+    tabDiagnostics[tabId].tabClosed = true;
+    tabDiagnostics[tabId].closedAt = new Date().toISOString();
+    
+    // Schedule cleanup of diagnostic data after a delay
+    setTimeout(() => {
+      if (tabDiagnostics[tabId]) {
+        delete tabDiagnostics[tabId];
+      }
+    }, 60000); // Keep diagnostic data for 1 minute after tab close
   }
   
   console.log('[BRA] Removed data for closed tab', tabId);

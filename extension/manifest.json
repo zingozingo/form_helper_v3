@@ -89,7 +89,7 @@
     "128": "icons/icon128.png"
   },
   "content_security_policy": {
-    "extension_pages": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://*.gov"
+    "extension_pages": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.gov https://*.state.us https://*.dos.myflorida.com https://*.sunbiz.org; frame-src 'self'"
   },
   "web_accessible_resources": [
     {

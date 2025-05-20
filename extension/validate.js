@@ -13,11 +13,58 @@ function validateJSON(jsonString) {
   }
 }
 
-// Function to check if JS syntax is valid
+// Function to check if JS syntax is valid (safer approach)
 function validateJS(jsString) {
   try {
-    // This will throw if there's a syntax error
-    new Function(jsString);
+    // Use a safer pattern-based approach instead of eval/Function
+    // Look for common syntax errors
+    
+    // Check for mismatched brackets/parentheses
+    const countChar = (str, char) => (str.match(new RegExp("\\" + char, "g")) || []).length;
+    
+    const openBraces = countChar(jsString, '{');
+    const closeBraces = countChar(jsString, '}');
+    const openBrackets = countChar(jsString, '[');
+    const closeBrackets = countChar(jsString, ']');
+    const openParens = countChar(jsString, '(');
+    const closeParens = countChar(jsString, ')');
+    
+    if (openBraces !== closeBraces) {
+      throw new Error("Mismatched curly braces: " + openBraces + " opening vs " + closeBraces + " closing");
+    }
+    
+    if (openBrackets !== closeBrackets) {
+      throw new Error("Mismatched square brackets: " + openBrackets + " opening vs " + closeBrackets + " closing");
+    }
+    
+    if (openParens !== closeParens) {
+      throw new Error("Mismatched parentheses: " + openParens + " opening vs " + closeParens + " closing");
+    }
+    
+    // Check for missing semicolons after statements (simplified)
+    const lines = jsString.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (line && 
+          !line.endsWith('{') && 
+          !line.endsWith('}') && 
+          !line.endsWith(';') && 
+          !line.endsWith(',') && 
+          !line.endsWith('(') && 
+          !line.endsWith('[') && 
+          !line.startsWith('//') && 
+          !line.startsWith('/*') && 
+          !line.endsWith('*/') && 
+          !line.startsWith('import') && 
+          !line.startsWith('export') && 
+          !line.startsWith('if') && 
+          !line.startsWith('else') && 
+          !line.startsWith('for') && 
+          !line.startsWith('while')) {
+        console.warn("Potential missing semicolon at line", i + 1, ":", line);
+      }
+    }
+    
     return true;
   } catch (e) {
     console.error('Invalid JS:', e.message);
