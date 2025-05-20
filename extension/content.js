@@ -713,9 +713,37 @@ async function detectBusinessForm() {
           // Analyze each form separately
           formElements.forEach((formElement, index) => {
             try {
-              const detector = new FieldDetector.default(formElement);
+              // Create detector with debug mode off by default
+              const detector = new FieldDetector.default(formElement, { debug: false });
+              
+              // Log form details
+              log(`Analyzing form ${index + 1}:`, {
+                id: formElement.id || '(no id)',
+                classes: Array.from(formElement.classList || []),
+                action: formElement.action || '(no action)',
+                method: formElement.method || 'get',
+                size: {
+                  width: formElement.offsetWidth,
+                  height: formElement.offsetHeight
+                }
+              });
+              
+              // Detect fields
               const fields = detector.detectFields();
-              log(`Form ${index + 1}: Detected ${fields.length} fields`, fields);
+              log(`Form ${index + 1}: Detected ${fields.length} fields`);
+              
+              // Add form to detection result for further analysis
+              if (!detectionResult.forms) {
+                detectionResult.forms = [];
+              }
+              
+              detectionResult.forms.push({
+                index: index,
+                id: formElement.id || null,
+                action: formElement.action || null,
+                method: formElement.method || 'get',
+                fieldCount: fields.length
+              });
             } catch (formFieldError) {
               reportError(formFieldError, `fieldDetection_form_${index}`, false);
             }
@@ -723,9 +751,39 @@ async function detectBusinessForm() {
         } else {
           // No explicit form elements, try to detect fields in the document body
           log('No explicit form elements found, scanning entire document for fields');
-          const detector = new FieldDetector.default(document.body);
-          const fields = detector.detectFields();
-          log(`Detected ${fields.length} fields in document body`, fields);
+          
+          try {
+            // Create detector with debug mode off by default
+            const detector = new FieldDetector.default(document.body, { debug: false });
+            
+            // Detect fields
+            const fields = detector.detectFields();
+            log(`Detected ${fields.length} fields in document body`);
+            
+            // Add form to detection result for further analysis
+            if (!detectionResult.forms) {
+              detectionResult.forms = [];
+            }
+            
+            // Create a virtual form entry for the implicit form
+            detectionResult.forms.push({
+              index: 0,
+              id: null,
+              action: window.location.href,
+              method: 'virtual',
+              fieldCount: fields.length,
+              isImplicit: true
+            });
+            
+            // Enable debug mode if a significant number of fields were found
+            if (fields.length > 5) {
+              log('Significant number of fields found, enabling detailed debug logging...');
+              detector.setDebugMode(true);
+              detector.detectFields(); // Run detection again with debug mode
+            }
+          } catch (bodyFieldError) {
+            reportError(bodyFieldError, 'bodyFieldDetection', false);
+          }
         }
       } catch (fieldDetectionError) {
         reportError(fieldDetectionError, 'fieldDetection', false);
@@ -1551,6 +1609,68 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({
           success: false,
           error: 'Invalid feedback data'
+        });
+      }
+    }
+    else if (message.action === 'debugFieldDetection') {
+      // Run field detection with debug mode enabled
+      try {
+        log('Running field detection in debug mode');
+        
+        const formElements = document.querySelectorAll('form');
+        
+        if (formElements.length > 0) {
+          // Analyze specified form or first form
+          const formIndex = message.formIndex || 0;
+          const formElement = formElements[Math.min(formIndex, formElements.length - 1)];
+          
+          const detector = new FieldDetector.default(formElement, { debug: true });
+          const fields = detector.detectFields();
+          
+          // Call additional detailed logging methods
+          detector.logValidationStatus();
+          
+          // Visual debugging - highlight fields on the page
+          const shouldHighlight = message.highlight !== false; // Default to true
+          if (shouldHighlight) {
+            detector.highlightFields();
+          }
+          
+          sendResponse({
+            success: true,
+            message: `Debug field detection completed for form ${formIndex}`,
+            fieldCount: fields.length,
+            formInfo: {
+              id: formElement.id || null,
+              action: formElement.action || null,
+              method: formElement.method || 'get'
+            }
+          });
+        } else {
+          // No forms, analyze body
+          const detector = new FieldDetector.default(document.body, { debug: true });
+          const fields = detector.detectFields();
+          
+          // Call additional detailed logging methods
+          detector.logValidationStatus();
+          
+          // Visual debugging - highlight fields on the page
+          const shouldHighlight = message.highlight !== false; // Default to true
+          if (shouldHighlight) {
+            detector.highlightFields();
+          }
+          
+          sendResponse({
+            success: true,
+            message: 'Debug field detection completed for document body',
+            fieldCount: fields.length
+          });
+        }
+      } catch (error) {
+        reportError(error, 'debugFieldDetection', false);
+        sendResponse({
+          success: false,
+          error: error.message
         });
       }
     }
