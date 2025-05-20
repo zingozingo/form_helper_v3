@@ -3,10 +3,12 @@
  * Implementation that detects business registration forms
  */
 
-// Import URL detector module
+// Import modules
 let URLDetector;
+let FieldDetector;
 (async () => {
   URLDetector = await import(chrome.runtime.getURL('modules/urlDetector.js'));
+  FieldDetector = await import(chrome.runtime.getURL('modules/fieldDetector.js'));
 })();
 
 // Global variables
@@ -698,6 +700,37 @@ async function detectBusinessForm() {
     };
     
     log('Detection result:', detectionResult);
+    
+    // If this is a business form, perform field detection
+    if (isBusinessForm && FieldDetector) {
+      try {
+        // Find all forms in the page
+        const formElements = document.querySelectorAll('form');
+        
+        if (formElements.length > 0) {
+          log(`Detected ${formElements.length} form elements, analyzing fields`);
+          
+          // Analyze each form separately
+          formElements.forEach((formElement, index) => {
+            try {
+              const detector = new FieldDetector.default(formElement);
+              const fields = detector.detectFields();
+              log(`Form ${index + 1}: Detected ${fields.length} fields`, fields);
+            } catch (formFieldError) {
+              reportError(formFieldError, `fieldDetection_form_${index}`, false);
+            }
+          });
+        } else {
+          // No explicit form elements, try to detect fields in the document body
+          log('No explicit form elements found, scanning entire document for fields');
+          const detector = new FieldDetector.default(document.body);
+          const fields = detector.detectFields();
+          log(`Detected ${fields.length} fields in document body`, fields);
+        }
+      } catch (fieldDetectionError) {
+        reportError(fieldDetectionError, 'fieldDetection', false);
+      }
+    }
     
     // Send to background script with error handling
     chrome.runtime.sendMessage({

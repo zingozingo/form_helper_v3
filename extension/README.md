@@ -13,6 +13,9 @@ This project has a clean, simplified structure:
   - content.js: Form detection script
   - background.js: Background service worker
   - popup.html/css/js: Popup UI files
+  - modules/: Modular functionality
+    - urlDetector.js: URL analysis module
+    - fieldDetector.js: Form field detection module
   - icons/: Extension icons
 
 ## Features
@@ -21,6 +24,8 @@ This project has a clean, simplified structure:
 - Shows detection status in extension popup
 - Identifies state (when possible)
 - Displays confidence score
+- Detects form fields and extracts their attributes
+- Analyzes form field types and labels
 - Simple UI for form assistance options
 
 ## Installation
@@ -50,4 +55,13 @@ The detection result includes:
 - State identification (if possible)
 - Detailed scores for different aspects of the analysis
 
-This is a minimal implementation focused on reliability and core functionality.
+### Field Detection
+
+The extension includes a field detection module that:
+- Identifies all input elements on forms (input, select, textarea)
+- Extracts field attributes (type, name, id, value, etc.)
+- Finds associated labels using various techniques
+- Provides methods to query fields by type, name pattern, or label pattern
+- Logs field information to the console for development and debugging
+
+This is a modular implementation focused on reliability and extensibility.
