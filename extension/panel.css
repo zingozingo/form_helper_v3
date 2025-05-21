@@ -66,22 +66,42 @@ header {
 .status {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  width: 100%;
 }
 
 #status-indicator {
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background-color: #ccc;
-  margin-right: 8px;
+  position: relative;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.2);
 }
 
 #status-indicator.active {
   background-color: #4caf50;
+  animation: pulse 2s infinite;
 }
 
 #status-indicator.warning {
   background-color: #ff9800;
+}
+
+#status-indicator.error {
+  background-color: #f44336;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(76, 175, 80, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(76, 175, 80, 0);
+  }
 }
 
 /* Views */
@@ -110,6 +130,14 @@ header {
 #no-detection p {
   margin-bottom: 12px;
   color: #666;
+}
+
+.auto-detection-notice {
+  font-size: 12px;
+  color: #666;
+  font-style: italic;
+  margin-top: 10px;
+  text-align: center;
 }
 
 button {
@@ -198,6 +226,35 @@ h2 {
   border-bottom: 1px solid #ddd;
   font-size: 14px;
   color: #333;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.chat-header h2 {
+  margin: 0;
+  color: #333;
+}
+
+.auto-fill-button {
+  background-color: #2e5cb8;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.auto-fill-button:hover {
+  background-color: #224c9c;
+}
+
+.auto-fill-button:active {
+  background-color: #1a3c7a;
+  transform: translateY(1px);
 }
 
 .chat-messages {

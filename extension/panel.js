@@ -6,16 +6,15 @@
 // DOM elements - Navigation
 const endeavorsButton = document.getElementById('endeavors-button');
 const userButton = document.getElementById('user-button');
+const autoFillButton = document.getElementById('auto-fill-button');
 
 // DOM elements - Detection
 const statusIndicator = document.getElementById('status-indicator');
-const statusText = document.getElementById('status-text');
 const noDetectionView = document.getElementById('no-detection');
 const detectionView = document.getElementById('detection');
 const stateValue = document.getElementById('state-value');
 const confidenceBar = document.getElementById('confidence-bar');
 const confidenceValue = document.getElementById('confidence-value');
-const checkAgainButton = document.getElementById('check-again');
 const errorContainer = document.getElementById('error-container');
 
 // Show error message
@@ -91,34 +90,81 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
     
-    // Set up Check Again button
-    checkAgainButton.addEventListener('click', function() {
-      statusText.textContent = 'Checking...';
-      hideError();
+    // Setup automatic detection cycle
+    function setupAutomaticDetection() {
+      // Track if detection is in progress
+      let detectionInProgress = false;
       
-      chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-        if (tabs && tabs[0]) {
-          // Ask content script to run detection
+      // Function to check for forms
+      function checkForForms() {
+        if (detectionInProgress) {
+          return; // Prevent overlapping detection attempts
+        }
+        
+        // Get current tab
+        chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+          if (!tabs || !tabs[0]) {
+            return; // No active tab
+          }
+          
+          const tabId = tabs[0].id;
+          
+          // Set status as checking - visual indicator
+          statusIndicator.classList.add('active');
+          
+          // Mark detection as in progress
+          detectionInProgress = true;
+          
+          // Trigger detection in content script
           try {
-            chrome.tabs.sendMessage(tabs[0].id, {
+            chrome.tabs.sendMessage(tabId, {
               action: 'triggerDetection'
             }, function(response) {
+              // Check for errors
               if (chrome.runtime.lastError) {
-                showError('Error connecting to page: ' + chrome.runtime.lastError.message);
+                // Only show error if connection fails completely
+                const error = chrome.runtime.lastError;
+                if (error.message.includes('receiving end does not exist')) {
+                  showError('Error connecting to page: ' + error.message);
+                }
+                detectionInProgress = false;
                 return;
               }
               
               // Wait a moment for detection to finish
               setTimeout(function() {
-                getDetectionResult(tabs[0].id);
+                getDetectionResult(tabId);
+                detectionInProgress = false;
               }, 500);
             });
           } catch (error) {
             showError('Error triggering detection: ' + error.message);
+            detectionInProgress = false;
           }
-        }
+        });
+      }
+      
+      // Immediately check when panel loads
+      checkForForms();
+      
+      // Set up periodic automatic detection
+      const detectionInterval = setInterval(checkForForms, 3000);
+      
+      // Clean up interval when panel is closed
+      window.addEventListener('unload', function() {
+        clearInterval(detectionInterval);
       });
-    });
+      
+      return {
+        checkNow: checkForForms,
+        stopChecking: function() {
+          clearInterval(detectionInterval);
+        }
+      };
+    }
+    
+    // Initialize automatic detection
+    const autoDetector = setupAutomaticDetection();
     
     // Set up navigation buttons
     endeavorsButton.addEventListener('click', function() {
@@ -129,6 +175,45 @@ document.addEventListener('DOMContentLoaded', function() {
     userButton.addEventListener('click', function() {
       console.log('[BRA] User button clicked');
       // Currently just a placeholder - no functionality yet
+    });
+    
+    // Set up Auto Fill button functionality
+    autoFillButton.addEventListener('click', function() {
+      console.log('[BRA] Auto Fill button clicked');
+      
+      // Show visual feedback that button was clicked
+      autoFillButton.disabled = true;
+      
+      // Get the current tab
+      chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+        if (tabs && tabs[0]) {
+          // Send message to content script to perform auto-fill
+          chrome.tabs.sendMessage(tabs[0].id, {
+            action: 'autoFillFields'
+          }, function(response) {
+            // Reset button state
+            autoFillButton.disabled = false;
+            
+            // Handle response
+            if (chrome.runtime.lastError) {
+              showError('Could not connect to page: ' + chrome.runtime.lastError.message);
+              return;
+            }
+            
+            if (response && response.success) {
+              // Show success message in chat
+              const chatMessages = document.getElementById('chat-messages');
+              const message = document.createElement('div');
+              message.className = 'message system';
+              message.textContent = response.message || 'Auto-filled form fields successfully!';
+              chatMessages.appendChild(message);
+              chatMessages.scrollTop = chatMessages.scrollHeight;
+            } else if (response && response.error) {
+              showError(response.error);
+            }
+          });
+        }
+      });
     });
   } catch (error) {
     showError('Initialization error: ' + error.message);
@@ -277,8 +362,8 @@ function askContentScript(tabId) {
       
       // Check if detection is still in progress
       if (statusResult && statusResult.attempts > 0 && !statusResult.hasResult) {
-        // Still working - show status
-        statusText.textContent = `Checking... (${statusResult.attempts}/${statusResult.maxAttempts})`;
+        // Still working - keep the status indicator active
+        statusIndicator.classList.add('active');
         
         // Wait a bit and check again if still trying
         if (statusResult.attempts < statusResult.maxAttempts) {
@@ -323,8 +408,13 @@ function askContentScript(tabId) {
   }
 }
 
-// Set up a periodic connection check
+// Set up a periodic connection check with enhanced monitoring
 function setupConnectionMonitoring() {
+  // Track connection status
+  let isConnected = false;
+  let lastActiveTimestamp = Date.now();
+  
+  // Check connection and auto-trigger detection if needed
   setInterval(() => {
     if (currentTabId) {
       // Quietly ping the content script
@@ -332,25 +422,70 @@ function setupConnectionMonitoring() {
         action: 'ping',
         timestamp: Date.now()
       }, function(response) {
+        // Handle error first
+        if (chrome.runtime.lastError) {
+          // Connection lost
+          if (isConnected) {
+            console.log('[BRA] Connection lost, waiting for reconnection');
+            isConnected = false;
+          }
+          return;
+        }
+        
         // Successful ping, content script is alive
         if (response && response.alive) {
+          // Update last active timestamp
+          lastActiveTimestamp = Date.now();
+          
+          // Update UI if reconnected
           const reconnectStatus = document.getElementById('reconnect-status');
           if (reconnectStatus) {
             reconnectStatus.textContent = 'Connected';
           }
           
-          // If we had an error but now have connection, refresh the panel
-          if (connectionRetryCount > 0) {
+          // If we just reconnected, refresh the panel
+          if (!isConnected) {
             connectionRetryCount = 0;
+            isConnected = true;
             getDetectionResult(currentTabId);
+            
+            // Also check if content script has new detection results
+            if (response.detectionStatus && response.detectionStatus.hasResult) {
+              // Trigger an immediate refresh of the data
+              setTimeout(() => getDetectionResult(currentTabId), 100);
+            }
+          }
+          
+          // Check if detection has changed in content script since we last checked
+          if (response.detectionStatus && response.detectionStatus.hasResult) {
+            // Get the detection result if it's been more than 5 seconds since last check
+            const timeSinceLastCheck = Date.now() - lastActiveTimestamp;
+            if (timeSinceLastCheck > 5000) {
+              getDetectionResult(currentTabId);
+            }
           }
         }
       });
     }
-  }, 5000); // Check every 5 seconds
+  }, 3000); // Check every 3 seconds
+  
+  // Enable detection for dynamic forms that might load after initial page load
+  setTimeout(() => {
+    if (currentTabId) {
+      chrome.tabs.sendMessage(currentTabId, {
+        action: 'detectDynamicForms'
+      }, function(response) {
+        // Silently handle errors - this is just an enhancement
+        if (chrome.runtime.lastError || !response || !response.success) {
+          return;
+        }
+        console.log('[BRA] Dynamic form detection enabled');
+      });
+    }
+  }, 2000);
 }
 
-// Initialize connection monitoring
+// Initialize enhanced connection monitoring
 setupConnectionMonitoring();
 
 // Update UI with detection result
@@ -366,7 +501,6 @@ function updateUI(result) {
   
   // Update status indicator
   statusIndicator.classList.add('active');
-  statusText.textContent = 'Business form detected';
   
   // Update state
   stateValue.textContent = result.state ? getStateName(result.state) : 'Unknown';
@@ -380,7 +514,6 @@ function updateUI(result) {
 // Show no detection view
 function showNoDetection() {
   statusIndicator.classList.remove('active');
-  statusText.textContent = 'No detection';
   
   noDetectionView.classList.remove('hidden');
   detectionView.classList.add('hidden');

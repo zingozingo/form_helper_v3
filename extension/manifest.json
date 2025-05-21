@@ -93,7 +93,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["modules/urlDetector.js"],
+      "resources": ["modules/urlDetector.js", "modules/fieldDetector.js"],
       "matches": ["<all_urls>"]
     }
   ]

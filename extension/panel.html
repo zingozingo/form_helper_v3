@@ -16,8 +16,7 @@
     
     <header>
       <div class="status">
-        <span id="status-indicator"></span>
-        <span id="status-text">Checking...</span>
+        <span id="status-indicator" title="Detection status"></span>
       </div>
     </header>
     
@@ -25,7 +24,7 @@
     
     <div id="no-detection" class="view">
       <p>No business registration form detected on this page.</p>
-      <button id="check-again">Check Again</button>
+      <p class="auto-detection-notice">Detection runs automatically every few seconds</p>
     </div>
     
     <div id="detection" class="view hidden">
@@ -43,17 +42,15 @@
         </div>
       </div>
       
-      <div class="info-card">
-        <h2>Form Assistance</h2>
-        <button class="action-button">Auto-Fill Common Fields</button>
-        <button class="action-button">Get Field Explanations</button>
-        <button class="action-button">State Requirements</button>
-      </div>
+      <!-- Form Assistance section removed -->
     </div>
     
     <!-- Chat Interface -->
     <div id="chat-container" class="chat-section">
-      <h2 class="chat-header">Registration Assistant</h2>
+      <div class="chat-header">
+        <h2>Registration Assistant</h2>
+        <button id="auto-fill-button" class="auto-fill-button">Auto Fill</button>
+      </div>
       <div id="chat-messages" class="chat-messages">
         <div class="message system">
           Hello! I'm your business registration assistant. How can I help you today?

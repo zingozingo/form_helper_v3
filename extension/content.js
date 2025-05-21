@@ -3,11 +3,132 @@
  * Implementation that detects business registration forms
  */
 
-// Import URL detector module
-let URLDetector;
-(async () => {
-  URLDetector = await import(chrome.runtime.getURL('modules/urlDetector.js'));
+// Import modules with proper error handling
+let URLDetector = null;
+let FieldDetector = null;
+
+// Load modules with reliable non-dynamic approach
+(async function loadModules() {
+  try {
+    // Load URL detector module
+    const urlDetectorURL = chrome.runtime.getURL('modules/urlDetector.js');
+    URLDetector = await import(urlDetectorURL);
+    console.log('[BRA] URLDetector module loaded successfully');
+    
+    // Load field detector module
+    const fieldDetectorURL = chrome.runtime.getURL('modules/fieldDetector.js');
+    FieldDetector = await import(fieldDetectorURL);
+    console.log('[BRA] FieldDetector module loaded successfully');
+  } catch (error) {
+    console.error('[BRA] Error loading modules:', error);
+    // Create fallback implementations if modules fail to load
+    if (!URLDetector) {
+      URLDetector = createFallbackURLDetector();
+    }
+    if (!FieldDetector) {
+      FieldDetector = createFallbackFieldDetector();
+    }
+  }
 })();
+
+// Fallback implementation for URL detector
+function createFallbackURLDetector() {
+  return {
+    default: {
+      analyzeUrl: function(url) {
+        // Simple implementation that checks for government domains and business keywords
+        const isGov = url.includes('.gov') || url.includes('.state.');
+        const isBusinessRelated = url.includes('business') || 
+                                url.includes('register') ||
+                                url.includes('filing');
+        return {
+          score: isGov && isBusinessRelated ? 80 : 30,
+          reasons: ['Using fallback detector']
+        };
+      },
+      identifyStateFromUrl: function(url) {
+        // Simple implementation to extract state from URL
+        const states = {
+          'california': 'CA', 'delaware': 'DE', 'nevada': 'NV', 'florida': 'FL',
+          'texas': 'TX', 'newyork': 'NY', 'wyoming': 'WY'
+        };
+        
+        for (const [name, code] of Object.entries(states)) {
+          if (url.toLowerCase().includes(name)) {
+            return code;
+          }
+        }
+        return null;
+      }
+    }
+  };
+}
+
+// Fallback implementation for field detector
+function createFallbackFieldDetector() {
+  return {
+    default: class FallbackFieldDetector {
+      constructor(root) {
+        this.root = root || document;
+        this.fields = [];
+      }
+      
+      detectFields() {
+        try {
+          console.log('[BRA] Using fallback field detector');
+          this.fields = [];
+          
+          // Simple implementation to detect form fields
+          const inputs = this.root.querySelectorAll('input, select, textarea');
+          inputs.forEach((element, index) => {
+            // Extract basic info for each field
+            this.fields.push({
+              element: element,
+              type: element.type || element.tagName.toLowerCase(),
+              name: element.name || '',
+              id: element.id || '',
+              value: element.value || '',
+              index: index
+            });
+          });
+          
+          return this.fields;
+        } catch (error) {
+          console.error('[BRA] Error in fallback field detection:', error);
+          return [];
+        }
+      }
+      
+      getFields() {
+        return this.fields;
+      }
+      
+      classifyFields() {
+        // Simple implementation that checks for business-related keywords
+        const businessKeywords = ['business', 'company', 'name', 'entity', 'type'];
+        
+        this.fields.forEach(field => {
+          const fieldText = (field.name + ' ' + field.id).toLowerCase();
+          
+          // Check if field contains business keywords
+          const matches = businessKeywords.filter(keyword => fieldText.includes(keyword));
+          
+          if (matches.length > 0) {
+            field.classification = {
+              category: 'business',
+              confidence: Math.min(matches.length * 25, 100)
+            };
+          }
+        });
+        
+        return {
+          totalFields: this.fields.length,
+          classifiedFields: this.fields.filter(f => f.classification).length
+        };
+      }
+    }
+  };
+}
 
 // Global variables
 let detectionResult = null;
@@ -939,6 +1060,75 @@ function analyzeFormElements() {
       return 0;
     }
     
+    // Use FieldDetector module to analyze form fields if available
+    let fieldDetectionResults = null;
+    let classificationStats = null;
+    
+    if (FieldDetector && FieldDetector.default) {
+      try {
+        log('Using FieldDetector module to analyze form fields');
+        
+        // Create a field detector instance for the current page
+        const detector = new FieldDetector.default(document);
+        
+        // Detect all form fields
+        const fields = detector.detectFields();
+        log(`FieldDetector found ${fields.length} form fields`);
+        
+        // Classify fields by their purpose
+        classificationStats = detector.classifyFields();
+        log('Field classification results:', classificationStats);
+        
+        // Store results for further analysis
+        fieldDetectionResults = {
+          fields: fields,
+          stats: classificationStats
+        };
+        
+        // Store diagnostic info
+        diagnosticInfo.fieldDetector = {
+          fieldsDetected: fields.length,
+          classifiedFields: classificationStats.classifiedFields,
+          categories: classificationStats.categories
+        };
+        
+        // Add score based on field detection
+        if (fields.length > 0) {
+          // Base points for finding fields
+          score += Math.min(fields.length * 2, 20);
+          
+          // More points if we could classify fields
+          if (classificationStats.classifiedFields > 0) {
+            // Additional points based on percentage of fields classified
+            const classificationRate = classificationStats.classifiedFields / fields.length;
+            score += Math.round(classificationRate * 20);
+            
+            // Additional points for business-related field categories
+            const businessCategories = ['businessName', 'entityType', 'businessId', 'taxId', 'businessAddress'];
+            let businessCategoryCount = 0;
+            
+            for (const category in classificationStats.categories) {
+              if (businessCategories.includes(category)) {
+                businessCategoryCount++;
+                // Bonus points for critical business categories
+                score += 10;
+              }
+            }
+            
+            // Very strong signal if multiple business categories are present
+            if (businessCategoryCount >= 3) {
+              score += 20;
+            }
+          }
+        }
+      } catch (detectorError) {
+        log('Error using FieldDetector:', detectorError.message);
+        reportError(detectorError, 'fieldDetector', false);
+        // Continue with fallback form analysis
+      }
+    }
+    
+    // Traditional form analysis as backup or supplement
     // Look for forms and interactive elements
     const forms = document.querySelectorAll('form');
     const formCount = forms.length;
@@ -961,7 +1151,7 @@ function analyzeFormElements() {
           try {
             const text = (el.textContent || el.value || '').toLowerCase();
             return text.includes('next') || text.includes('continue') || 
-                   text.includes('proceed') || text.includes('forward');
+                  text.includes('proceed') || text.includes('forward');
           } catch (error) {
             return false; // Skip this element if there's an error
           }
@@ -972,7 +1162,7 @@ function analyzeFormElements() {
           try {
             const text = (el.textContent || el.value || '').toLowerCase();
             return text.includes('previous') || text.includes('back') || 
-                   text.includes('return') || text.includes('prior');
+                  text.includes('return') || text.includes('prior');
           } catch (error) {
             return false; // Skip this element if there's an error
           }
@@ -1012,196 +1202,6 @@ function analyzeFormElements() {
       // Store diagnostic info
       diagnosticInfo.inputCount = inputCount;
     }
-    
-    // Field patterns organized by category for better matching
-    const fieldPatterns = {
-      // Business identity fields
-      businessIdentity: [
-        'business', 'company', 'entity', 'organization', 'business-name',
-        'company-name', 'entity-name', 'organization-name', 'legal-name',
-        'commercial-name', 'trade-name', 'dba', 'doing-business-as',
-        'fictitious-name', 'assumed-name'
-      ],
-      
-      // Entity type and structure fields
-      entityType: [
-        'entity-type', 'business-type', 'organization-type', 'company-type',
-        'structure', 'business-structure', 'entity-structure',
-        'llc', 'corporation', 'partnership', 'sole-proprietorship',
-        'nonprofit', 'professional', 'domestic', 'foreign',
-        'profit', 'benefit', 'public-benefit', 'purpose'
-      ],
-      
-      // Contact and address fields in business context
-      contactAddress: [
-        'principal', 'address', 'business-address', 'mailing-address',
-        'registered-office', 'principal-office', 'principal-place',
-        'physical-address', 'headquarters', 'place-of-business',
-        'county', 'state', 'jurisdiction', 'zip', 'postal',
-        'phone', 'email', 'contact', 'business-phone', 'business-email'
-      ],
-      
-      // Agent and representative fields
-      agentRepresentative: [
-        'agent', 'registered-agent', 'resident-agent', 'statutory-agent',
-        'organizer', 'incorporator', 'member', 'manager', 'director',
-        'officer', 'authorized-person', 'authorized-representative',
-        'owner', 'president', 'secretary', 'treasurer', 'partner',
-        'service-of-process', 'executor'
-      ],
-      
-      // Filing and registration fields
-      filingRegistration: [
-        'filing', 'form', 'register', 'registration', 'application',
-        'file', 'submit', 'filing-type', 'filing-number', 'entity-number',
-        'business-id', 'entity-id', 'business-number', 'confirmation',
-        'file-number', 'document-number', 'control-number', 'document-type',
-        'application-type', 'application-number'
-      ],
-      
-      // Formation document fields
-      formationDocuments: [
-        'articles', 'articles-of-organization', 'articles-of-incorporation',
-        'certificate', 'certificate-of-formation', 'operating-agreement',
-        'bylaws', 'statement', 'statement-of-information', 'annual-report',
-        'formation', 'organization', 'incorporation', 'date-of-formation'
-      ],
-      
-      // Tax and financial fields
-      taxFinancial: [
-        'ein', 'tax-id', 'tax-identification', 'employer-identification',
-        'federal-id', 'federal-tax-id', 'fein', 'ssn', 'social-security',
-        'tax', 'taxes', 'fiscal', 'fiscal-year', 'naics', 'sic-code',
-        'business-activity', 'business-purpose', 'sales-tax', 'withholding',
-        'revenue', 'accounting', 'fiscal-year-end'
-      ],
-      
-      // Payment and fee fields
-      paymentFees: [
-        'fee', 'payment', 'amount', 'cost', 'price', 'total',
-        'credit-card', 'card', 'transaction', 'pay', 'checkout',
-        'billing', 'invoice', 'receipt', 'confirmation', 'expedite',
-        'service-fee', 'filing-fee', 'processing-fee', 'expedite-fee'
-      ],
-      
-      // Authorization and acknowledgment fields
-      authorizationAcknowledgment: [
-        'signature', 'sign', 'consent', 'acknowledge', 'declaration',
-        'certify', 'attest', 'affirm', 'authorization', 'verify',
-        'confirm', 'agreement', 'terms', 'conditions', 'perjury',
-        'electronic-signature', 'date-signed', 'executed', 'date-executed'
-      ]
-    };
-    
-    // Flatten patterns for matching with tracking of categories
-    const flattenedPatterns = {};
-    for (const category in fieldPatterns) {
-      for (const pattern of fieldPatterns[category]) {
-        flattenedPatterns[pattern] = category;
-      }
-    }
-    
-    // Check for business registration field patterns
-    const allFields = Array.from(document.querySelectorAll('input, select, textarea, [contenteditable="true"]'));
-    
-    // Track matches by category
-    const categoryMatches = {};
-    for (const category in fieldPatterns) {
-      categoryMatches[category] = 0;
-    }
-    
-    // Record fields with business-related attributes
-    const matchedFieldDetails = [];
-    
-    // Process each field
-    allFields.forEach(field => {
-      // Get all possible field identifiers
-      const name = field.name ? field.name.toLowerCase() : '';
-      const id = field.id ? field.id.toLowerCase() : '';
-      const className = field.className ? field.className.toLowerCase() : '';
-      const placeholder = field.placeholder ? field.placeholder.toLowerCase() : '';
-      const ariaLabel = field.getAttribute('aria-label') ? field.getAttribute('aria-label').toLowerCase() : '';
-      
-      // Get associated label
-      let labelText = '';
-      if (field.labels && field.labels.length > 0) {
-        labelText = field.labels[0].textContent.toLowerCase();
-      } else if (field.id) {
-        const associatedLabel = document.querySelector(`label[for="${field.id}"]`);
-        if (associatedLabel) {
-          labelText = associatedLabel.textContent.toLowerCase();
-        }
-      }
-      
-      // Look for fields near the element that might be labels
-      if (!labelText) {
-        // Check sibling or parent elements for text that might be labels
-        const parent = field.parentElement;
-        if (parent) {
-          const siblingLabels = parent.querySelectorAll('label, div, span, p');
-          for (const sibling of siblingLabels) {
-            if (sibling !== field && sibling.textContent.trim()) {
-              labelText = sibling.textContent.toLowerCase();
-              break;
-            }
-          }
-        }
-      }
-      
-      // Check for matches in all possible field identifiers
-      for (const pattern in flattenedPatterns) {
-        const category = flattenedPatterns[pattern];
-        
-        // Use regex for better boundary matching
-        const regex = new RegExp(`\\b${pattern.replace(/-/g, '[\\s-]')}\\b`, 'i');
-        
-        // Check all field identifiers for matches
-        if (regex.test(name) || regex.test(id) || regex.test(placeholder) || 
-            regex.test(labelText) || regex.test(ariaLabel) || regex.test(className)) {
-          
-          // Record the match
-          categoryMatches[category]++;
-          
-          // Store details for diagnostic purposes
-          matchedFieldDetails.push({
-            pattern: pattern,
-            category: category,
-            fieldType: field.tagName.toLowerCase() + (field.type ? `[${field.type}]` : ''),
-            matchedOn: [
-              name && regex.test(name) ? 'name' : null,
-              id && regex.test(id) ? 'id' : null,
-              placeholder && regex.test(placeholder) ? 'placeholder' : null,
-              labelText && regex.test(labelText) ? 'label' : null,
-              ariaLabel && regex.test(ariaLabel) ? 'aria-label' : null,
-              className && regex.test(className) ? 'class' : null
-            ].filter(Boolean).join(',')
-          });
-          
-          break; // Count each field only once
-        }
-      }
-    });
-    
-    // Store matching info
-    diagnosticInfo.matchedCategories = categoryMatches;
-    diagnosticInfo.matchedFieldCount = Object.values(categoryMatches).reduce((sum, count) => sum + count, 0);
-    diagnosticInfo.matchedFields = matchedFieldDetails;
-    
-    // Score based on field categories detected
-    const categoryCount = Object.keys(categoryMatches).filter(
-      cat => categoryMatches[cat] > 0
-    ).length;
-    
-    // The more diverse categories of business fields, the stronger the signal
-    if (categoryCount >= 5) score += 30; // Very strong signal
-    else if (categoryCount >= 3) score += 20; // Strong signal
-    else if (categoryCount >= 2) score += 10; // Moderate signal
-    
-    // Additional points for key categories that strongly indicate business registration
-    if (categoryMatches.entityType > 0) score += 15;
-    if (categoryMatches.filingRegistration > 0) score += 15;
-    if (categoryMatches.formationDocuments > 0) score += 15;
-    if (categoryMatches.taxFinancial > 0) score += 10;
     
     // Form submission context analysis - look at buttons and their text
     const submitButtons = Array.from(document.querySelectorAll('button[type="submit"], input[type="submit"], button:not([type]), .btn-primary, .submit-button'));
