@@ -1,0 +1,97 @@
+{
+  "state": "DC",
+  "description": "DC-specific overrides and exceptions to common validation patterns",
+  "validation_overrides": {
+    "business_name": {
+      "restricted_words": [
+        "District of Columbia",
+        "DC Government",
+        "Federal",
+        "United States",
+        "Congress"
+      ],
+      "special_requirements": {
+        "trade_names": "Must file a Trade Name Registration if operating under a name different from the registered entity name",
+        "clean_hands": "Must have a Clean Hands Certificate from OTR before obtaining licenses"
+      }
+    },
+    "addresses": {
+      "registered_agent": {
+        "must_be_dc_address": true,
+        "cannot_be_po_box": true,
+        "special_zones": [
+          "Federal properties may have restrictions",
+          "Embassy areas may require additional documentation"
+        ]
+      }
+    },
+    "tax_requirements": {
+      "unique_ids": {
+        "fr500_number": {
+          "description": "DC-specific tax registration number",
+          "format": "FR[0-9]{9}",
+          "required_for": ["Sales tax permit", "Employer withholding"]
+        }
+      },
+      "special_taxes": {
+        "ballpark_fee": {
+          "applies_to": "Businesses with gross receipts over $5 million",
+          "amount": "$[varies by revenue]"
+        }
+      }
+    },
+    "license_categories": {
+      "bbl_categories": [
+        "General Business",
+        "Charitable Solicitation",
+        "Employment Agency",
+        "Pawnbroker",
+        "Secondhand Dealer",
+        "Vending"
+      ],
+      "endorsements": {
+        "description": "Additional endorsements required for specific activities",
+        "examples": [
+          "Alcohol (ABRA license required)",
+          "Food Service (DOH permit required)",
+          "Public Space Use (DDOT permit required)"
+        ]
+      }
+    }
+  },
+  "dc_specific_features": {
+    "clean_hands_certificate": {
+      "description": "Certificate showing no outstanding DC government debts",
+      "required_for": ["Business license", "Permits", "Contract awards"],
+      "valid_for": "90 days",
+      "obtain_from": "MyTax.DC.gov"
+    },
+    "home_occupation_permit": {
+      "description": "Required for businesses operating from residential properties",
+      "restrictions": [
+        "No more than 25% of residence",
+        "No employees who don't live there",
+        "No customer visits without special permit"
+      ]
+    },
+    "ward_considerations": {
+      "description": "DC is divided into 8 wards, some programs are ward-specific",
+      "examples": [
+        "Great Streets grants",
+        "Ward-specific business improvement districts"
+      ]
+    }
+  },
+  "filing_deadlines": {
+    "biennial_report": {
+      "description": "Required every two years for all registered entities",
+      "due_date": "April 1st of filing year",
+      "fee": "$300 for corporations, $220 for LLCs"
+    },
+    "business_license_renewal": {
+      "cycle": "Every 2 years",
+      "due_date": "Last day of endorsement period",
+      "late_penalty": "25% of license fee"
+    }
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "state": "DC",
+  "agencies": {
+    "DLCP": {
+      "full_name": "Department of Licensing and Consumer Protection",
+      "formerly": "DCRA - Department of Consumer and Regulatory Affairs",
+      "website": "https://dlcp.dc.gov/",
+      "responsibilities": [
+        "Basic Business Licenses",
+        "Professional Licenses",
+        "Permits and Inspections"
+      ],
+      "contact": {
+        "phone": "202-671-2773",
+        "email": "dlcp@dc.gov",
+        "address": "1100 4th Street SW, Washington, DC 20024"
+      },
+      "online_portals": {
+        "mybusiness": {
+          "url": "https://mybusiness.dc.gov/",
+          "description": "Online portal for business licenses and permits"
+        }
+      }
+    },
+    "DCRA": {
+      "full_name": "Department of Consumer and Regulatory Affairs (Historic)",
+      "note": "Split into DLCP and DOB in 2022",
+      "corporate_division": {
+        "name": "Corporations Division",
+        "website": "https://corp.dcra.dc.gov/",
+        "responsibilities": [
+          "Business entity registration",
+          "Corporate filings",
+          "Trade name registration"
+        ]
+      }
+    },
+    "OTR": {
+      "full_name": "Office of Tax and Revenue",
+      "website": "https://otr.cfo.dc.gov/",
+      "responsibilities": [
+        "Business tax registration",
+        "Sales tax permits",
+        "Employer withholding",
+        "Business personal property tax"
+      ],
+      "contact": {
+        "phone": "202-727-4829",
+        "customer_service": "202-727-4TAX (4829)",
+        "address": "1101 4th Street SW, Suite 270 West, Washington, DC 20024"
+      },
+      "online_portals": {
+        "mytax": {
+          "url": "https://mytax.dc.gov/",
+          "description": "Online tax filing and payment system"
+        }
+      }
+    },
+    "DOES": {
+      "full_name": "Department of Employment Services",
+      "website": "https://does.dc.gov/",
+      "responsibilities": [
+        "Unemployment insurance registration",
+        "Workers' compensation",
+        "Wage and hour compliance"
+      ],
+      "contact": {
+        "phone": "202-724-7000",
+        "address": "4058 Minnesota Avenue NE, Washington, DC 20019"
+      }
+    }
+  },
+  "emergency_contacts": {
+    "business_help_center": {
+      "phone": "202-727-7278",
+      "hours": "Monday-Friday, 8:15 AM - 4:45 PM ET"
+    },
+    "small_business_resource_center": {
+      "phone": "202-727-3900",
+      "website": "https://dslbd.dc.gov/"
+    }
+  }
+}

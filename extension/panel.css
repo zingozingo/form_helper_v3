@@ -390,6 +390,10 @@ footer {
   font-size: 13px;
   max-height: 200px;
   overflow-y: auto;
+}
+
+.error-container.show {
+  display: block;
   animation: fade-in 0.3s ease-in-out;
 }
 

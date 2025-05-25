@@ -1,0 +1,103 @@
+{
+  "field_patterns": {
+    "business_name": {
+      "patterns": ["business.*name", "company.*name", "entity.*name", "legal.*name", "dba", "doing.*business.*as"],
+      "priority": 90,
+      "attributes": ["business", "company", "entity", "legal", "dba"],
+      "validation": "text"
+    },
+    "ein": {
+      "patterns": ["ein", "employer.*identification.*number", "federal.*tax.*id", "fein", "tax.*id.*number"],
+      "priority": 95,
+      "attributes": ["ein", "fein", "tax-id", "taxid"],
+      "validation": "ein"
+    },
+    "ssn": {
+      "patterns": ["ssn", "social.*security", "social.*security.*number"],
+      "priority": 95,
+      "attributes": ["ssn", "social-security"],
+      "validation": "ssn"
+    },
+    "email": {
+      "patterns": ["email", "e-mail", "email.*address", "contact.*email"],
+      "priority": 85,
+      "attributes": ["email", "mail"],
+      "validation": "email"
+    },
+    "phone": {
+      "patterns": ["phone", "telephone", "phone.*number", "contact.*number", "tel"],
+      "priority": 85,
+      "attributes": ["phone", "tel", "telephone"],
+      "validation": "phone"
+    },
+    "address": {
+      "patterns": ["address", "street.*address", "mailing.*address", "business.*address"],
+      "priority": 80,
+      "attributes": ["address", "street"],
+      "validation": "text"
+    },
+    "city": {
+      "patterns": ["city", "municipality", "town"],
+      "priority": 80,
+      "attributes": ["city", "town"],
+      "validation": "text"
+    },
+    "state": {
+      "patterns": ["state", "province"],
+      "priority": 80,
+      "attributes": ["state", "province"],
+      "validation": "state"
+    },
+    "zip": {
+      "patterns": ["zip", "postal.*code", "zip.*code"],
+      "priority": 80,
+      "attributes": ["zip", "postal", "zipcode"],
+      "validation": "zip"
+    },
+    "entity_type": {
+      "patterns": ["entity.*type", "business.*type", "organization.*type", "structure", "business.*structure"],
+      "priority": 85,
+      "attributes": ["entity-type", "business-type"],
+      "validation": "select"
+    },
+    "date": {
+      "patterns": ["date", "formation.*date", "start.*date", "effective.*date"],
+      "priority": 75,
+      "attributes": ["date"],
+      "validation": "date"
+    },
+    "name": {
+      "patterns": ["name", "full.*name", "legal.*name", "your.*name"],
+      "priority": 70,
+      "attributes": ["name"],
+      "validation": "text"
+    },
+    "first_name": {
+      "patterns": ["first.*name", "given.*name"],
+      "priority": 75,
+      "attributes": ["firstname", "first-name"],
+      "validation": "text"
+    },
+    "last_name": {
+      "patterns": ["last.*name", "surname", "family.*name"],
+      "priority": 75,
+      "attributes": ["lastname", "last-name", "surname"],
+      "validation": "text"
+    }
+  },
+  "url_patterns": {
+    "government": ["\\.gov", "\\.us", "state\\.", "sos\\.", "secretary.*state"],
+    "business_registration": ["business", "entity", "corporation", "llc", "register", "formation", "incorporate"],
+    "tax": ["tax", "revenue", "irs", "ein"],
+    "licensing": ["license", "permit", "certification"]
+  },
+  "validation_patterns": {
+    "ein": "^\\d{2}-?\\d{7}$",
+    "ssn": "^\\d{3}-?\\d{2}-?\\d{4}$",
+    "email": "^[^@]+@[^@]+\\.[^@]+$",
+    "phone": "^[\\d\\s\\(\\)\\-\\.]+$",
+    "zip": "^\\d{5}(-\\d{4})?$",
+    "state": "^[A-Z]{2}$",
+    "date": "^\\d{1,2}[\\/\\-]\\d{1,2}[\\/\\-]\\d{2,4}$"
+  }
+}

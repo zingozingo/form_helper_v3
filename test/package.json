@@ -1,0 +1,37 @@
+{
+  "name": "form-helper-v3-tests",
+  "version": "1.0.0",
+  "description": "Test suite for Form Helper V3 hybrid detection system",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:knowledge": "jest knowledgeLoader.test.js",
+    "test:field": "jest fieldDetector.test.js",
+    "test:hybrid": "jest hybridDetection.test.js",
+    "test:verbose": "jest --verbose"
+  },
+  "jest": {
+    "testEnvironment": "jsdom",
+    "setupFilesAfterEnv": ["<rootDir>/setup.js"],
+    "moduleNameMapper": {
+      "^@/(.*)$": "<rootDir>/../extension/$1"
+    },
+    "collectCoverageFrom": [
+      "../extension/modules/**/*.js",
+      "!../extension/modules/**/*.test.js"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "branches": 80,
+        "functions": 80,
+        "lines": 80,
+        "statements": 80
+      }
+    }
+  },
+  "devDependencies": {
+    "jest": "^29.0.0",
+    "jest-environment-jsdom": "^29.0.0"
+  }
+}

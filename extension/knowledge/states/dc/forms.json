@@ -1,0 +1,90 @@
+{
+  "state": "DC",
+  "state_full": "District of Columbia",
+  "forms": {
+    "business_license": {
+      "name": "Basic Business License",
+      "url": "https://mybusiness.dc.gov/",
+      "agency": "DLCP",
+      "description": "Required for all businesses operating in DC",
+      "identifiers": {
+        "urls": [
+          "mybusiness.dc.gov",
+          "dlcp.dc.gov/page/basic-business-license"
+        ],
+        "form_titles": [
+          "Basic Business License Application",
+          "BBL Application"
+        ],
+        "form_numbers": ["BBL-1", "BBL-APP"]
+      },
+      "required_fields": [
+        "business_name",
+        "business_address",
+        "owner_name",
+        "phone",
+        "email",
+        "business_type",
+        "ein_or_ssn"
+      ]
+    },
+    "business_registration": {
+      "name": "Business Registration",
+      "url": "https://corp.dcra.dc.gov/",
+      "agency": "DCRA",
+      "description": "Register a new business entity",
+      "identifiers": {
+        "urls": [
+          "corp.dcra.dc.gov",
+          "dcra.dc.gov/service/register-new-business"
+        ],
+        "form_titles": [
+          "Articles of Organization",
+          "Articles of Incorporation",
+          "Business Registration"
+        ]
+      },
+      "entity_specific": {
+        "llc": {
+          "form_number": "DNF-1",
+          "required_docs": ["Articles of Organization", "Operating Agreement"]
+        },
+        "corporation": {
+          "form_number": "DNF-2",
+          "required_docs": ["Articles of Incorporation", "Bylaws"]
+        }
+      }
+    },
+    "tax_registration": {
+      "name": "Tax Registration",
+      "url": "https://mytax.dc.gov/",
+      "agency": "OTR",
+      "description": "Register for DC tax accounts",
+      "identifiers": {
+        "urls": [
+          "mytax.dc.gov",
+          "otr.cfo.dc.gov/page/new-business-tax-registration"
+        ],
+        "form_titles": [
+          "Combined Registration Application",
+          "FR-500"
+        ],
+        "form_numbers": ["FR-500", "FR-500T"]
+      }
+    }
+  },
+  "form_detection_rules": {
+    "priority_urls": [
+      "mybusiness.dc.gov",
+      "corp.dcra.dc.gov",
+      "mytax.dc.gov"
+    ],
+    "title_keywords": [
+      "District of Columbia",
+      "DC.gov",
+      "DCRA",
+      "Basic Business License",
+      "BBL"
+    ]
+  }
+}

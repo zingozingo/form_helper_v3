@@ -1,0 +1,94 @@
+{
+  "_instructions": {
+    "description": "Template for state-specific form configurations",
+    "usage": "Copy this file to knowledge/states/[STATE_ABBR]/forms.json and fill in state-specific data",
+    "required_fields": "All fields marked with [REQUIRED] must be filled",
+    "optional_fields": "Fields marked with [OPTIONAL] can be removed if not applicable"
+  },
+  "state": "[REQUIRED: State abbreviation, e.g., 'CA', 'NY']",
+  "state_full": "[REQUIRED: Full state name, e.g., 'California', 'New York']",
+  "forms": {
+    "business_license": {
+      "name": "[REQUIRED: Official form name]",
+      "url": "[REQUIRED: Primary URL for this form]",
+      "agency": "[REQUIRED: Agency abbreviation - must match agencies.json]",
+      "description": "[REQUIRED: Brief description of form purpose]",
+      "identifiers": {
+        "urls": [
+          "[REQUIRED: List of URLs where this form might be found]"
+        ],
+        "form_titles": [
+          "[REQUIRED: Variations of form title that might appear]"
+        ],
+        "form_numbers": ["[OPTIONAL: Official form numbers, e.g., 'LLC-1', 'CORP-01']"]
+      },
+      "required_fields": [
+        "[REQUIRED: List of fields required on this form]",
+        "Common fields: business_name, business_address, owner_name, phone, email, ein_or_ssn"
+      ],
+      "fee_structure": {
+        "[OPTIONAL]": "Include if fees vary by business type or other factors"
+      }
+    },
+    "business_registration": {
+      "name": "[REQUIRED: e.g., 'Business Entity Registration']",
+      "url": "[REQUIRED]",
+      "agency": "[REQUIRED]",
+      "description": "[REQUIRED]",
+      "identifiers": {
+        "urls": ["[REQUIRED]"],
+        "form_titles": ["[REQUIRED]"]
+      },
+      "entity_specific": {
+        "llc": {
+          "form_number": "[OPTIONAL: LLC-specific form number]",
+          "required_docs": ["[OPTIONAL: List of required documents]"],
+          "fee": "[OPTIONAL: Filing fee amount]"
+        },
+        "corporation": {
+          "form_number": "[OPTIONAL]",
+          "required_docs": ["[OPTIONAL]"],
+          "fee": "[OPTIONAL]"
+        },
+        "[OPTIONAL: Add other entity types as needed]": {}
+      }
+    },
+    "tax_registration": {
+      "name": "[REQUIRED: e.g., 'State Tax Registration']",
+      "url": "[REQUIRED]",
+      "agency": "[REQUIRED]",
+      "description": "[REQUIRED]",
+      "identifiers": {
+        "urls": ["[REQUIRED]"],
+        "form_titles": ["[REQUIRED]"],
+        "form_numbers": ["[OPTIONAL]"]
+      },
+      "tax_types": [
+        "[OPTIONAL: List specific tax types, e.g., 'Sales Tax', 'Employer Withholding']"
+      ]
+    },
+    "[OPTIONAL: Add other state-specific forms]": {
+      "_comment": "Examples: professional_license, sellers_permit, workers_comp_registration"
+    }
+  },
+  "form_detection_rules": {
+    "priority_urls": [
+      "[REQUIRED: List domains in order of priority for form detection]"
+    ],
+    "title_keywords": [
+      "[REQUIRED: Keywords that indicate a state-specific form]",
+      "Include state name, common abbreviations, agency names"
+    ],
+    "exclude_patterns": [
+      "[OPTIONAL: Patterns to exclude false positives]"
+    ]
+  },
+  "special_requirements": {
+    "[OPTIONAL]": "Include any state-specific requirements or notes",
+    "examples": [
+      "Publication requirements for LLCs",
+      "County-level business licenses",
+      "Industry-specific licenses"
+    ]
+  }
+}

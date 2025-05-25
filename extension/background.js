@@ -35,7 +35,7 @@ function updateBadge(tabId, isDetected, confidenceScore = 0, hasError = false) {
 }
 
 // Set up the side panel
-if (chrome.sidePanel) {
+if (chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
   chrome.sidePanel
     .setPanelBehavior({ openPanelOnActionClick: true })
     .catch((error) => console.error('[BRA] Error setting panel behavior:', error.message || 'Unknown error'));

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>District of Columbia Business Registration</title>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .form-section { margin: 20px 0; }
+        label { display: block; margin: 10px 0 5px; font-weight: bold; }
+        input, select { width: 300px; padding: 5px; margin-bottom: 10px; }
+        .required { color: red; }
+    </style>
+</head>
+<body>
+    <h1>District of Columbia Corporate Registration</h1>
+    <p>Department of Consumer and Regulatory Affairs (DCRA)</p>
+    
+    <form id="dc-business-registration-form">
+        <div class="form-section">
+            <h2>Business Information</h2>
+            
+            <label for="tradeName">
+                Trade Name <span class="required">*</span>
+            </label>
+            <input type="text" id="tradeName" name="trade_name" required>
+            
+            <label for="entityType">
+                Entity Type <span class="required">*</span>
+            </label>
+            <select id="entityType" name="entity_type" required>
+                <option value="">Select Entity Type</option>
+                <option value="LLC">Limited Liability Company (LLC)</option>
+                <option value="CORP">Corporation</option>
+                <option value="LP">Limited Partnership</option>
+                <option value="NONPROFIT">Nonprofit Corporation</option>
+            </select>
+            
+            <label for="businessPurpose">
+                Business Purpose <span class="required">*</span>
+            </label>
+            <textarea id="businessPurpose" name="business_purpose" rows="3" cols="40" required></textarea>
+        </div>
+
+        <div class="form-section">
+            <h2>Registered Agent Information</h2>
+            
+            <label for="raName">
+                Registered Agent Name <span class="required">*</span>
+            </label>
+            <input type="text" id="raName" name="registered_agent_name" required>
+            
+            <label for="raAddress">
+                Registered Agent Address (DC Address Required) <span class="required">*</span>
+            </label>
+            <input type="text" id="raAddress" name="ra_street_address" placeholder="Street Address" required>
+            <input type="text" id="raCity" name="ra_city" value="Washington" readonly>
+            <input type="text" id="raState" name="ra_state" value="DC" readonly>
+            <input type="text" id="raZip" name="ra_zip_code" placeholder="ZIP Code" pattern="\d{5}" required>
+        </div>
+
+        <div class="form-section">
+            <h2>Principal Office Address</h2>
+            
+            <label for="principalAddress">
+                Street Address <span class="required">*</span>
+            </label>
+            <input type="text" id="principalAddress" name="principal_street_address" required>
+            
+            <label for="principalCity">
+                City <span class="required">*</span>
+            </label>
+            <input type="text" id="principalCity" name="principal_city" required>
+            
+            <label for="principalState">
+                State <span class="required">*</span>
+            </label>
+            <select id="principalState" name="principal_state" required>
+                <option value="">Select State</option>
+                <option value="DC">District of Columbia</option>
+                <option value="AL">Alabama</option>
+                <option value="AK">Alaska</option>
+                <!-- Other states omitted for brevity -->
+            </select>
+            
+            <label for="principalZip">
+                ZIP Code <span class="required">*</span>
+            </label>
+            <input type="text" id="principalZip" name="principal_zip_code" pattern="\d{5}(-\d{4})?" required>
+        </div>
+
+        <div class="form-section">
+            <h2>Federal Tax Information</h2>
+            
+            <label for="ein">
+                Federal EIN (if applicable)
+            </label>
+            <input type="text" id="ein" name="federal_ein" pattern="\d{2}-\d{7}" placeholder="XX-XXXXXXX">
+        </div>
+
+        <div class="form-section">
+            <h2>DC-Specific Requirements</h2>
+            
+            <label for="cleanHandsCert">
+                Clean Hands Certificate Number
+            </label>
+            <input type="text" id="cleanHandsCert" name="clean_hands_certificate">
+            
+            <label for="biReport">
+                Initial Biennial Report Due Date
+            </label>
+            <input type="date" id="biReport" name="biennial_report_date">
+        </div>
+
+        <button type="submit">Submit Registration</button>
+    </form>
+</body>
+</html>

@@ -19,12 +19,35 @@ const errorContainer = document.getElementById('error-container');
 
 // Show error message
 function showError(message, isHtml = false) {
-  if (isHtml) {
-    errorContainer.innerHTML = message;
-  } else {
-    errorContainer.textContent = message;
+  if (!errorContainer) {
+    console.error('Error container not found:', message);
+    return;
   }
-  errorContainer.style.display = 'block';
+  
+  // Clear previous content
+  errorContainer.innerHTML = '';
+  
+  if (isHtml && typeof message === 'string') {
+    // Parse HTML safely without inline styles
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = message;
+    
+    // Remove any inline styles to comply with CSP
+    const allElements = tempDiv.getElementsByTagName('*');
+    for (let elem of allElements) {
+      elem.removeAttribute('style');
+    }
+    
+    // Append cleaned content
+    while (tempDiv.firstChild) {
+      errorContainer.appendChild(tempDiv.firstChild);
+    }
+  } else {
+    errorContainer.textContent = message || 'An error occurred';
+  }
+  
+  // Use class to show instead of inline style
+  errorContainer.classList.add('show');
 }
 
 // Format error details into HTML
@@ -39,13 +62,13 @@ function formatErrorDetails(errors) {
     fatalErrors[fatalErrors.length - 1] : 
     errors[errors.length - 1];
     
-  let message = '<strong>Error:</strong> ' + recentError.message;
+  let message = '<strong>Error:</strong> ' + (recentError.message || 'Unknown error');
   
   // Add troubleshooting tips based on context
   message += '<div class="error-tips">';
   message += '<strong>Troubleshooting tips:</strong><ul>';
   
-  if (recentError.context.includes('connect') || recentError.message.includes('connect')) {
+  if (recentError.context && (recentError.context.includes('connect') || recentError.message.includes('connect'))) {
     message += '<li>Try refreshing the page</li>';
     message += '<li>Check if the website allows extensions</li>';
   }
@@ -74,7 +97,9 @@ function formatErrorDetails(errors) {
 
 // Hide error message
 function hideError() {
-  errorContainer.style.display = 'none';
+  if (errorContainer) {
+    errorContainer.classList.remove('show');
+  }
 }
 
 // Initialize when panel opens
@@ -115,32 +140,25 @@ document.addEventListener('DOMContentLoaded', function() {
           // Mark detection as in progress
           detectionInProgress = true;
           
-          // Trigger detection in content script
-          try {
-            chrome.tabs.sendMessage(tabId, {
-              action: 'triggerDetection'
-            }, function(response) {
-              // Check for errors
-              if (chrome.runtime.lastError) {
-                // Only show error if connection fails completely
-                const error = chrome.runtime.lastError;
-                if (error.message.includes('receiving end does not exist')) {
-                  showError('Error connecting to page: ' + error.message);
-                }
-                detectionInProgress = false;
-                return;
-              }
-              
-              // Wait a moment for detection to finish
-              setTimeout(function() {
-                getDetectionResult(tabId);
-                detectionInProgress = false;
-              }, 500);
-            });
-          } catch (error) {
-            showError('Error triggering detection: ' + error.message);
+          // Trigger detection in content script with retry logic
+          sendMessageWithRetry(tabId, {
+            action: 'triggerDetection'
+          }, function(response) {
+            // Success callback
+            // Wait a moment for detection to finish
+            setTimeout(function() {
+              getDetectionResult(tabId);
+              detectionInProgress = false;
+            }, 500);
+          }, function(error) {
+            // Error callback after all retries
+            if (error.message.includes('receiving end does not exist')) {
+              showError('The page is not ready yet. Please wait a moment and try again.');
+            } else {
+              showError('Error connecting to page: ' + error.message);
+            }
             detectionInProgress = false;
-          }
+          });
         });
       }
       
@@ -167,19 +185,24 @@ document.addEventListener('DOMContentLoaded', function() {
     const autoDetector = setupAutomaticDetection();
     
     // Set up navigation buttons
-    endeavorsButton.addEventListener('click', function() {
-      console.log('[BRA] My Endeavors button clicked');
-      // Currently just a placeholder - no functionality yet
-    });
+    if (endeavorsButton) {
+      endeavorsButton.addEventListener('click', function() {
+        console.log('[BRA] My Endeavors button clicked');
+        // Currently just a placeholder - no functionality yet
+      });
+    }
     
-    userButton.addEventListener('click', function() {
-      console.log('[BRA] User button clicked');
-      // Currently just a placeholder - no functionality yet
-    });
+    if (userButton) {
+      userButton.addEventListener('click', function() {
+        console.log('[BRA] User button clicked');
+        // Currently just a placeholder - no functionality yet
+      });
+    }
     
     // Set up Auto Fill button functionality
-    autoFillButton.addEventListener('click', function() {
-      console.log('[BRA] Auto Fill button clicked');
+    if (autoFillButton) {
+      autoFillButton.addEventListener('click', function() {
+        console.log('[BRA] Auto Fill button clicked');
       
       // Show visual feedback that button was clicked
       autoFillButton.disabled = true;
@@ -215,6 +238,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
       });
     });
+    }
   } catch (error) {
     showError('Initialization error: ' + error.message);
   }
@@ -274,9 +298,31 @@ function getDetectionResult(tabId) {
   }
 }
 
-// Track connection attempts and tab
-let connectionRetryCount = 0;
-const MAX_CONNECTION_RETRIES = 3;
+// Connection retry logic with exponential backoff
+function sendMessageWithRetry(tabId, message, onSuccess, onError, retryCount = 0) {
+  const MAX_RETRIES = 3;
+  const RETRY_DELAYS = [100, 500, 1500]; // Exponential backoff
+  
+  chrome.tabs.sendMessage(tabId, message, function(response) {
+    if (chrome.runtime.lastError) {
+      const error = chrome.runtime.lastError;
+      
+      // Check if we should retry
+      if (retryCount < MAX_RETRIES && error.message.includes('receiving end does not exist')) {
+        // Retry after delay
+        setTimeout(function() {
+          sendMessageWithRetry(tabId, message, onSuccess, onError, retryCount + 1);
+        }, RETRY_DELAYS[retryCount]);
+      } else {
+        // All retries exhausted or non-recoverable error
+        if (onError) onError(error);
+      }
+    } else {
+      // Success
+      if (onSuccess) onSuccess(response);
+    }
+  });
+}
 let currentTabId = null;
 let autoRetryTimer = null;
 
@@ -285,63 +331,12 @@ function askContentScript(tabId) {
   try {
     currentTabId = tabId;
     // First, try to get detection status
-    chrome.tabs.sendMessage(tabId, {
+    sendMessageWithRetry(tabId, {
       action: 'getDetectionStatus',
       timestamp: Date.now()
     }, function(statusResult) {
-      if (chrome.runtime.lastError) {
-        connectionRetryCount++;
-        // Connection error - provide helpful troubleshooting
-        showNoDetection();
-        
-        // Create error message with auto-retry information
-        const errorHtml = `
-          <strong>Cannot connect to page:</strong> ${chrome.runtime.lastError.message}
-          <div class="error-tips">
-            <strong>Troubleshooting tips:</strong>
-            <ul>
-              <li>The page may be using a restricted Content Security Policy</li>
-              <li>Try refreshing the page</li>
-              <li>The extension may need additional permissions</li>
-              <li>The page might be in a protected state</li>
-            </ul>
-          </div>
-          <div id="reconnect-status">Retrying connection automatically... (${connectionRetryCount}/${MAX_CONNECTION_RETRIES})</div>
-          <button id="retry-button" class="action-button" style="margin-top: 10px; width: 100%;">Retry Connection Now</button>
-        `;
-        
-        showError(errorHtml, true);
-        
-        // Add listener for manual retry
-        setTimeout(() => {
-          const retryButton = document.getElementById('retry-button');
-          if (retryButton) {
-            retryButton.addEventListener('click', function() {
-              connectionRetryCount = 0; // Reset counter on manual retry
-              const statusEl = document.getElementById('reconnect-status');
-              if (statusEl) statusEl.textContent = 'Connecting...';
-              getDetectionResult(tabId);
-            });
-          }
-        }, 50);
-        
-        // Auto-retry with increasing delay if not at max attempts
-        if (connectionRetryCount <= MAX_CONNECTION_RETRIES) {
-          clearTimeout(autoRetryTimer);
-          const retryDelay = Math.min(1000 * Math.pow(1.5, connectionRetryCount - 1), 10000);
-          
-          autoRetryTimer = setTimeout(function() {
-            const statusEl = document.getElementById('reconnect-status');
-            if (statusEl) statusEl.textContent = 'Attempting to reconnect...';
-            getDetectionResult(tabId);
-          }, retryDelay);
-        }
-        
-        return;
-      }
-      
-      // Connection successful - reset retry counter
-      connectionRetryCount = 0;
+      // Success callback - connection established
+      hideError();
       
       // Check if status includes fallback mode
       if (statusResult && statusResult.fallbackMode) {
@@ -355,9 +350,6 @@ function askContentScript(tabId) {
             </ul>
           </div>
         `, true);
-      } else {
-        // Normal operation - hide fallback warning
-        hideError();
       }
       
       // Check if detection is still in progress
@@ -376,14 +368,10 @@ function askContentScript(tabId) {
         }
       } else {
         // Has result or hasn't started - get the result
-        chrome.tabs.sendMessage(tabId, {
+        sendMessageWithRetry(tabId, {
           action: 'getDetectionResult'
         }, function(result) {
-          if (chrome.runtime.lastError) {
-            showNoDetection();
-            return;
-          }
-          
+          // Success - process result
           if (result && result.isBusinessRegistrationForm !== undefined) {
             updateUI(result);
             // Only hide error if not in fallback mode
@@ -399,8 +387,31 @@ function askContentScript(tabId) {
               showError("Detection hasn't started yet. Click 'Check Again' to begin.");
             }
           }
+        }, function(error) {
+          // Error getting result
+          showError('Error getting detection result: ' + error.message);
+          showNoDetection();
         });
       }
+    }, function(error) {
+      // Error callback - connection failed
+      showNoDetection();
+      
+      // Create error message
+      const errorHtml = `
+        <strong>Cannot connect to page:</strong> ${error.message}
+        <div class="error-tips">
+          <strong>Troubleshooting tips:</strong>
+          <ul>
+            <li>The page may be using a restricted Content Security Policy</li>
+            <li>Try refreshing the page</li>
+            <li>The extension may need additional permissions</li>
+            <li>The page might be in a protected state</li>
+          </ul>
+        </div>
+      `;
+      
+      showError(errorHtml, true);
     });
   } catch (error) {
     showError('Error communicating with page: ' + error.message);

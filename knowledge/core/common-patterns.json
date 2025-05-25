@@ -1,0 +1,114 @@
+{
+  "governmentFormIndicators": {
+    "urlPatterns": [
+      "\\.gov",
+      "\\.state\\.[a-z]{2}\\.us",
+      "secretary.*state",
+      "sos\\.",
+      "business.*registration",
+      "corp.*commission",
+      "department.*revenue"
+    ],
+    "titleKeywords": [
+      "business registration",
+      "entity formation",
+      "articles of",
+      "certificate of",
+      "statement of information",
+      "annual report",
+      "franchise tax",
+      "registered agent"
+    ],
+    "formElements": [
+      "ein",
+      "fein",
+      "state tax id",
+      "entity type",
+      "jurisdiction",
+      "registered agent"
+    ]
+  },
+  "businessRegistrationFields": {
+    "entityName": {
+      "patterns": [
+        "entity.*name",
+        "business.*name",
+        "company.*name",
+        "corporation.*name",
+        "llc.*name"
+      ],
+      "validators": {
+        "minLength": 1,
+        "maxLength": 255,
+        "required": true
+      }
+    },
+    "entityType": {
+      "patterns": [
+        "entity.*type",
+        "business.*type",
+        "organization.*type",
+        "structure"
+      ],
+      "commonValues": [
+        "LLC",
+        "Corporation",
+        "Partnership",
+        "Sole Proprietorship",
+        "Non-Profit"
+      ]
+    },
+    "identificationNumbers": {
+      "ein": {
+        "patterns": ["ein", "fein", "federal.*tax.*id"],
+        "format": "^\\d{2}-\\d{7}$"
+      },
+      "stateId": {
+        "patterns": ["state.*id", "state.*tax.*id", "account.*number"],
+        "format": "varies by state"
+      }
+    }
+  },
+  "formStructures": {
+    "sections": [
+      {
+        "name": "Entity Information",
+        "commonFields": ["entityName", "entityType", "formationDate", "jurisdiction"]
+      },
+      {
+        "name": "Registered Agent",
+        "commonFields": ["agentName", "agentAddress", "agentPhone", "agentEmail"]
+      },
+      {
+        "name": "Principal Office",
+        "commonFields": ["officeAddress", "mailingAddress", "phone", "email"]
+      },
+      {
+        "name": "Ownership",
+        "commonFields": ["ownerName", "ownerTitle", "ownerAddress", "ownershipPercentage"]
+      }
+    ]
+  },
+  "fieldGroupingPatterns": {
+    "address": {
+      "components": ["street", "city", "state", "zip", "country"],
+      "indicators": ["address", "location", "street", "city", "state", "zip"]
+    },
+    "contact": {
+      "components": ["phone", "email", "fax"],
+      "indicators": ["contact", "phone", "email", "telephone"]
+    },
+    "name": {
+      "components": ["firstName", "middleName", "lastName", "suffix"],
+      "indicators": ["name", "first", "last", "middle"]
+    }
+  },
+  "validationPatterns": {
+    "email": "^[^@]+@[^@]+\\.[^@]+$",
+    "phone": "^\\(?\\d{3}\\)?[\\s.-]?\\d{3}[\\s.-]?\\d{4}$",
+    "zip": "^\\d{5}(-\\d{4})?$",
+    "ein": "^\\d{2}-\\d{7}$",
+    "date": "^(0?[1-9]|1[0-2])[\\/\\-](0?[1-9]|[12]\\d|3[01])[\\/\\-](\\d{4}|\\d{2})$",
+    "ssn": "^\\d{3}-\\d{2}-\\d{4}$"
+  }
+}

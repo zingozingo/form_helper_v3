@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Edge Case Test Form - Complex Business Registration</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .dynamic-section { border: 2px dashed #999; padding: 10px; margin: 10px 0; }
+        .nested-fieldset { margin-left: 20px; border-left: 3px solid #ccc; padding-left: 15px; }
+        .hidden { display: none; }
+        .ambiguous-field { background-color: #ffffcc; }
+        .ajax-loaded { background-color: #ccffcc; }
+        table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+        td { padding: 5px; border: 1px solid #ddd; }
+    </style>
+</head>
+<body>
+    <h1>Edge Case Test Form</h1>
+    <p>This form contains various edge cases for testing the detection system</p>
+    
+    <form id="edge-case-form">
+        <!-- Edge Case 1: Ambiguous field names -->
+        <h2>Ambiguous Fields</h2>
+        <div class="ambiguous-field">
+            <label>Name:</label>
+            <input type="text" name="name" placeholder="Could be business or personal">
+            
+            <label>Type:</label>
+            <select name="type">
+                <option value="">Select...</option>
+                <option value="1">Option 1</option>
+                <option value="2">Option 2</option>
+            </select>
+            
+            <label>ID:</label>
+            <input type="text" name="id" placeholder="Could be EIN, State ID, or other">
+        </div>
+
+        <!-- Edge Case 2: Dynamic fields (simulated) -->
+        <h2>Dynamic Fields Section</h2>
+        <div class="dynamic-section">
+            <button type="button" onclick="addOwnerField()">Add Owner</button>
+            <div id="owners-container">
+                <div class="owner-field">
+                    <label>Owner 1 Name:</label>
+                    <input type="text" name="owner_1_name">
+                </div>
+            </div>
+        </div>
+
+        <!-- Edge Case 3: Fields in tables -->
+        <h2>Table-based Layout</h2>
+        <table>
+            <tr>
+                <td><label for="table-business-name">Business Name</label></td>
+                <td><input type="text" id="table-business-name" name="table_business_name"></td>
+            </tr>
+            <tr>
+                <td><label>EIN/Tax ID</label></td>
+                <td><input type="text" name="table_ein" pattern="\d{2}-\d{7}"></td>
+            </tr>
+            <tr>
+                <td colspan="2">
+                    <label>Business Address</label>
+                    <input type="text" name="table_address" style="width: 100%">
+                </td>
+            </tr>
+        </table>
+
+        <!-- Edge Case 4: Deeply nested fields -->
+        <h2>Nested Fieldsets</h2>
+        <fieldset>
+            <legend>Primary Information</legend>
+            <fieldset class="nested-fieldset">
+                <legend>Legal Entity Details</legend>
+                <fieldset class="nested-fieldset">
+                    <legend>Registration Info</legend>
+                    <label>Entity Name:</label>
+                    <input type="text" name="deeply_nested_entity_name">
+                    <label>Formation State:</label>
+                    <select name="deeply_nested_state">
+                        <option value="">Choose...</option>
+                        <option value="DE">Delaware</option>
+                        <option value="NV">Nevada</option>
+                    </select>
+                </fieldset>
+            </fieldset>
+        </fieldset>
+
+        <!-- Edge Case 5: Hidden fields that might become visible -->
+        <h2>Conditional Fields</h2>
+        <div>
+            <label>Are you a foreign entity?</label>
+            <input type="radio" name="is_foreign" value="yes" onclick="toggleForeignFields(true)"> Yes
+            <input type="radio" name="is_foreign" value="no" onclick="toggleForeignFields(false)"> No
+            
+            <div id="foreign-fields" class="hidden">
+                <label>Country of Formation:</label>
+                <input type="text" name="formation_country">
+                <label>US Agent Name:</label>
+                <input type="text" name="us_agent_name">
+            </div>
+        </div>
+
+        <!-- Edge Case 6: Fields with no labels -->
+        <h2>Fields Without Labels</h2>
+        <div>
+            <input type="text" name="business_name_no_label" placeholder="Business Name (no label)">
+            <input type="text" id="ein_no_label" placeholder="XX-XXXXXXX">
+            <input type="email" title="Contact Email" placeholder="email@example.com">
+        </div>
+
+        <!-- Edge Case 7: Duplicate field names -->
+        <h2>Duplicate Names (Different Contexts)</h2>
+        <div>
+            <h3>Registered Agent Address</h3>
+            <input type="text" name="address" placeholder="Agent Street Address">
+            <input type="text" name="city" placeholder="Agent City">
+            <input type="text" name="state" placeholder="Agent State">
+            
+            <h3>Business Address</h3>
+            <input type="text" name="address" placeholder="Business Street Address">
+            <input type="text" name="city" placeholder="Business City">
+            <input type="text" name="state" placeholder="Business State">
+        </div>
+
+        <!-- Edge Case 8: Non-standard input types -->
+        <h2>Non-standard Inputs</h2>
+        <div>
+            <label>Business Start Date:</label>
+            <input type="date" name="start_date">
+            
+            <label>Number of Employees:</label>
+            <input type="range" name="employee_count" min="1" max="1000">
+            
+            <label>Primary Business Color:</label>
+            <input type="color" name="brand_color">
+            
+            <label>Business Hours:</label>
+            <input type="time" name="opening_time">
+        </div>
+
+        <!-- Edge Case 9: AJAX-loaded content (simulated) -->
+        <h2>AJAX-Loaded Section</h2>
+        <div id="ajax-content" class="ajax-loaded">
+            <!-- This would typically be loaded dynamically -->
+            <p>This section simulates AJAX-loaded content</p>
+            <label>Dynamically Loaded Business Type:</label>
+            <select name="ajax_business_type">
+                <option>LLC</option>
+                <option>Corporation</option>
+            </select>
+        </div>
+
+        <!-- Edge Case 10: Readonly and disabled fields -->
+        <h2>Readonly and Disabled Fields</h2>
+        <div>
+            <label>System-assigned ID:</label>
+            <input type="text" name="system_id" value="AUTO-12345" readonly>
+            
+            <label>Locked Business Name:</label>
+            <input type="text" name="locked_name" value="Example Corp" disabled>
+            
+            <label>Pre-filled EIN:</label>
+            <input type="text" name="prefilled_ein" value="12-3456789" readonly>
+        </div>
+
+        <!-- Edge Case 11: Custom data attributes -->
+        <h2>Fields with Data Attributes</h2>
+        <div>
+            <label>Smart Business Name:</label>
+            <input type="text" 
+                   name="smart_business_name" 
+                   data-field-type="business-name"
+                   data-validation="required"
+                   data-max-length="100">
+            
+            <label>Smart EIN:</label>
+            <input type="text" 
+                   name="smart_ein"
+                   data-field-type="federal-tax-id"
+                   data-format="XX-XXXXXXX">
+        </div>
+
+        <!-- Edge Case 12: Contenteditable elements -->
+        <h2>Contenteditable Elements</h2>
+        <div>
+            <label>Business Description:</label>
+            <div contenteditable="true" 
+                 data-name="business_description"
+                 style="border: 1px solid #ccc; padding: 5px; min-height: 50px;">
+                Enter your business description here...
+            </div>
+        </div>
+
+        <!-- Edge Case 13: Multi-state references -->
+        <h2>Multi-State References</h2>
+        <div>
+            <p>This form serves California, Delaware, New York, and Texas businesses.</p>
+            <label>Select Your State:</label>
+            <select name="multi_state_select">
+                <option value="">Choose your state...</option>
+                <option value="CA">California</option>
+                <option value="DE">Delaware</option>
+                <option value="NY">New York</option>
+                <option value="TX">Texas</option>
+            </select>
+        </div>
+
+        <!-- Edge Case 14: Malformed HTML -->
+        <h2>Malformed HTML Section</h2>
+        <div>
+            <label>Unclosed Business Name
+            <input type="text" name="malformed_business_name">
+            
+            <input type="text" name="no_closing_tag" placeholder="Missing closing tag"
+            
+            <label for="nonexistent">Label for Non-existent Field</label>
+        </div>
+
+        <button type="submit">Submit Edge Case Form</button>
+    </form>
+
+    <script>
+        // Simulate dynamic field addition
+        let ownerCount = 1;
+        function addOwnerField() {
+            ownerCount++;
+            const container = document.getElementById('owners-container');
+            const newField = document.createElement('div');
+            newField.className = 'owner-field';
+            newField.innerHTML = `
+                <label>Owner ${ownerCount} Name:</label>
+                <input type="text" name="owner_${ownerCount}_name">
+            `;
+            container.appendChild(newField);
+        }
+
+        // Toggle foreign entity fields
+        function toggleForeignFields(show) {
+            const foreignFields = document.getElementById('foreign-fields');
+            foreignFields.classList.toggle('hidden', !show);
+        }
+
+        // Simulate AJAX content loading
+        setTimeout(() => {
+            const ajaxContent = document.getElementById('ajax-content');
+            const newField = document.createElement('div');
+            newField.innerHTML = `
+                <label>AJAX-Loaded EIN:</label>
+                <input type="text" name="ajax_ein" placeholder="Loaded via AJAX">
+            `;
+            ajaxContent.appendChild(newField);
+        }, 1000);
+    </script>
+</body>
+</html>

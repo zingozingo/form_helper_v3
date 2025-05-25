@@ -1,0 +1,110 @@
+{
+  "_instructions": {
+    "description": "Template for state-specific overrides to common patterns and validation rules",
+    "usage": "Copy this file to knowledge/states/[STATE_ABBR]/overrides.json and fill in state-specific data",
+    "note": "Only include overrides that differ from common patterns in validation-rules.json"
+  },
+  "state": "[REQUIRED: State abbreviation]",
+  "description": "[REQUIRED: Brief description of what makes this state's requirements unique]",
+  "validation_overrides": {
+    "business_name": {
+      "restricted_words": [
+        "[OPTIONAL: Words that cannot be used in business names without permission]",
+        "Common examples: 'Bank', 'Insurance', 'University', state name"
+      ],
+      "required_endings": {
+        "[OPTIONAL: Entity-specific required endings]": {
+          "corporation": ["Inc.", "Corp.", "Corporation", "Incorporated"],
+          "llc": ["LLC", "L.L.C.", "Limited Liability Company"]
+        }
+      },
+      "special_requirements": {
+        "[OPTIONAL: Any special naming requirements]": "Description"
+      }
+    },
+    "addresses": {
+      "registered_agent": {
+        "must_be_state_address": "[REQUIRED: true/false]",
+        "cannot_be_po_box": "[OPTIONAL: true/false]",
+        "special_requirements": ["[OPTIONAL: List any special requirements]"]
+      },
+      "principal_office": {
+        "[OPTIONAL: Requirements for principal office address]": {}
+      }
+    },
+    "tax_requirements": {
+      "unique_ids": {
+        "[TAX_ID_NAME]": {
+          "description": "[OPTIONAL: State-specific tax ID description]",
+          "format": "[OPTIONAL: Regex pattern for validation]",
+          "required_for": ["[List of uses]"]
+        }
+      },
+      "special_taxes": {
+        "[TAX_NAME]": {
+          "description": "[What this tax is for]",
+          "applies_to": "[Who must pay]",
+          "rate_or_amount": "[Tax rate or amount]"
+        }
+      }
+    },
+    "ein_format": {
+      "[OPTIONAL: If state has specific EIN requirements]": {
+        "description": "Special EIN requirements",
+        "pattern": "Override pattern if different from federal"
+      }
+    }
+  },
+  "state_specific_features": {
+    "[FEATURE_NAME]": {
+      "description": "[REQUIRED: What this feature is]",
+      "required_for": ["[List of situations where required]"],
+      "how_to_obtain": "[Instructions for obtaining]",
+      "valid_for": "[OPTIONAL: Validity period]",
+      "cost": "[OPTIONAL: Cost if applicable]"
+    },
+    "_examples": {
+      "certificate_of_good_standing": "Required for foreign entity registration",
+      "publication_requirement": "LLCs must publish in newspapers",
+      "franchise_tax": "Annual tax on business entities"
+    }
+  },
+  "filing_deadlines": {
+    "annual_report": {
+      "description": "[OPTIONAL: Annual/Biennial report requirements]",
+      "due_date": "[When due]",
+      "fee": "[Filing fee]",
+      "penalty": "[Late filing penalty]"
+    },
+    "franchise_tax": {
+      "description": "[OPTIONAL: If state has franchise tax]",
+      "due_date": "[When due]",
+      "calculation": "[How calculated]"
+    },
+    "[OTHER_DEADLINES]": {
+      "description": "[What this deadline is for]",
+      "frequency": "[Annual/Biennial/Quarterly/etc]",
+      "due_date": "[When due]"
+    }
+  },
+  "local_requirements": {
+    "[OPTIONAL: City/County level requirements]": {
+      "description": "Some cities/counties require additional licenses",
+      "major_cities": {
+        "[CITY_NAME]": {
+          "additional_requirements": ["[List requirements]"],
+          "website": "[City business portal]"
+        }
+      }
+    }
+  },
+  "industry_specific": {
+    "[OPTIONAL: Industries with special requirements]": {
+      "[INDUSTRY_NAME]": {
+        "additional_licenses": ["[Required licenses]"],
+        "regulatory_agency": "[Agency name]",
+        "special_requirements": ["[List requirements]"]
+      }
+    }
+  }
+}

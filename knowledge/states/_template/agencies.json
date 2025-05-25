@@ -1,0 +1,73 @@
+{
+  "_instructions": {
+    "description": "Template for state agency information",
+    "usage": "Copy this file to knowledge/states/[STATE_ABBR]/agencies.json and fill in state-specific data",
+    "note": "Agency abbreviations used here must match those referenced in forms.json"
+  },
+  "state": "[REQUIRED: State abbreviation]",
+  "agencies": {
+    "[AGENCY_ABBR]": {
+      "full_name": "[REQUIRED: Full official agency name]",
+      "website": "[REQUIRED: Main agency website]",
+      "formerly": "[OPTIONAL: Previous names if agency was renamed/reorganized]",
+      "responsibilities": [
+        "[REQUIRED: List main responsibilities related to business registration]"
+      ],
+      "contact": {
+        "phone": "[REQUIRED: Main phone number]",
+        "email": "[OPTIONAL: General email address]",
+        "address": "[OPTIONAL: Physical address]",
+        "hours": "[OPTIONAL: Business hours]"
+      },
+      "online_portals": {
+        "[PORTAL_NAME]": {
+          "url": "[REQUIRED: Portal URL]",
+          "description": "[REQUIRED: What this portal is used for]",
+          "supported_services": [
+            "[OPTIONAL: List of specific services available]"
+          ]
+        }
+      },
+      "divisions": {
+        "[OPTIONAL: Sub-divisions if relevant]": {
+          "name": "[Division name]",
+          "responsibilities": ["[List of responsibilities]"],
+          "contact": {}
+        }
+      }
+    },
+    "[Add more agencies as needed]": {
+      "_common_agencies": [
+        "Secretary of State (business registration)",
+        "Department of Revenue/Taxation (tax registration)",
+        "Department of Labor (unemployment insurance, workers comp)",
+        "Department of Licensing (professional licenses)"
+      ]
+    }
+  },
+  "emergency_contacts": {
+    "[OPTIONAL: Include help centers, hotlines, etc.]": {
+      "phone": "[Phone number]",
+      "hours": "[Operating hours]",
+      "services": ["[List of services]"]
+    }
+  },
+  "regional_offices": {
+    "[OPTIONAL: For states with regional offices]": {
+      "[REGION_NAME]": {
+        "cities_served": ["[List of cities]"],
+        "address": "[Office address]",
+        "phone": "[Regional phone]"
+      }
+    }
+  },
+  "special_programs": {
+    "[OPTIONAL: State-specific business programs]": {
+      "small_business_center": {
+        "description": "[Program description]",
+        "website": "[Program website]",
+        "eligibility": "[Who can use this program]"
+      }
+    }
+  }
+}

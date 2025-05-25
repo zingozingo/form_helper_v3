@@ -85,11 +85,14 @@ const TEST_URLS = [
 ];
 
 // Run tests
-function runTests() {
+async function runTests() {
   console.log('=== URL DETECTOR TEST RESULTS ===\n');
   
-  const results = TEST_URLS.map(test => {
-    const analysis = URLDetector.analyzeUrl(test.url);
+  // Initialize URL detector
+  await URLDetector.initialize();
+  
+  const results = await Promise.all(TEST_URLS.map(async test => {
+    const analysis = await URLDetector.analyzeUrl(test.url);
     const stateCode = URLDetector.identifyStateFromUrl(test.url);
     
     return {
@@ -101,7 +104,7 @@ function runTests() {
       confidentCategory: getConfidenceCategory(analysis.score),
       reasons: analysis.reasons
     };
-  });
+  }));
   
   // Display results in confidence categories
   const confidenceGroups = {

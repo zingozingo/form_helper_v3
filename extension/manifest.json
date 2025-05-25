@@ -67,7 +67,7 @@
         "*://*.sunbiz.org/*"
       ],
       "js": ["content.js"],
-      "run_at": "document_start",
+      "run_at": "document_end",
       "type": "module",
       "all_frames": true
     }
@@ -93,7 +93,15 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["modules/urlDetector.js", "modules/fieldDetector.js"],
+      "resources": [
+        "modules/urlDetector.js", 
+        "modules/fieldDetector.js",
+        "modules/knowledgeLoader.js",
+        "knowledge/common/*.json",
+        "knowledge/states/*.json",
+        "knowledge/states/*/*.json",
+        "knowledge/entities/*.json"
+      ],
       "matches": ["<all_urls>"]
     }
   ]

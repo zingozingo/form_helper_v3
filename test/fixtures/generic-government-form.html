@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Government Business License Application</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .section { margin: 20px 0; border: 1px solid #ccc; padding: 15px; }
+        label { display: inline-block; width: 200px; margin: 5px 0; }
+        input, select { width: 250px; padding: 3px; }
+    </style>
+</head>
+<body>
+    <h1>Business License Application</h1>
+    <p>Generic Government Form - No State Specified</p>
+    
+    <form id="generic-business-form">
+        <div class="section">
+            <h3>Applicant Information</h3>
+            
+            <label>Business Name:</label>
+            <input type="text" name="business_name" required><br>
+            
+            <label>DBA/Trade Name:</label>
+            <input type="text" name="dba_name"><br>
+            
+            <label>Business Structure:</label>
+            <select name="business_structure" required>
+                <option value="">Choose One</option>
+                <option value="sole_prop">Sole Proprietorship</option>
+                <option value="partnership">Partnership</option>
+                <option value="llc">Limited Liability Company</option>
+                <option value="corporation">Corporation</option>
+            </select><br>
+            
+            <label>Federal Tax ID:</label>
+            <input type="text" name="tax_id" placeholder="XX-XXXXXXX"><br>
+        </div>
+
+        <div class="section">
+            <h3>Contact Information</h3>
+            
+            <label>Contact Person:</label>
+            <input type="text" name="contact_name" required><br>
+            
+            <label>Phone Number:</label>
+            <input type="tel" name="phone" required><br>
+            
+            <label>Email Address:</label>
+            <input type="email" name="email" required><br>
+        </div>
+
+        <div class="section">
+            <h3>Business Location</h3>
+            
+            <label>Street Address:</label>
+            <input type="text" name="street_address" required><br>
+            
+            <label>Suite/Unit:</label>
+            <input type="text" name="suite"><br>
+            
+            <label>City:</label>
+            <input type="text" name="city" required><br>
+            
+            <label>State:</label>
+            <input type="text" name="state" maxlength="2" required><br>
+            
+            <label>ZIP Code:</label>
+            <input type="text" name="zip_code" pattern="\d{5}(-\d{4})?" required><br>
+        </div>
+
+        <div class="section">
+            <h3>Business Details</h3>
+            
+            <label>Business Start Date:</label>
+            <input type="date" name="start_date" required><br>
+            
+            <label>Number of Employees:</label>
+            <input type="number" name="employee_count" min="0"><br>
+            
+            <label>Annual Revenue:</label>
+            <select name="annual_revenue">
+                <option value="">Select Range</option>
+                <option value="0-50k">$0 - $50,000</option>
+                <option value="50k-100k">$50,001 - $100,000</option>
+                <option value="100k-500k">$100,001 - $500,000</option>
+                <option value="500k+">Over $500,000</option>
+            </select><br>
+            
+            <label>Business Description:</label>
+            <textarea name="business_description" rows="4" cols="40"></textarea>
+        </div>
+
+        <div class="section">
+            <h3>Additional Information</h3>
+            
+            <label>License Type Requested:</label>
+            <select name="license_type" required>
+                <option value="">Select License Type</option>
+                <option value="general">General Business License</option>
+                <option value="retail">Retail License</option>
+                <option value="professional">Professional License</option>
+                <option value="contractor">Contractor License</option>
+            </select><br>
+            
+            <label>Previous License Number:</label>
+            <input type="text" name="previous_license"><br>
+        </div>
+
+        <button type="submit">Submit Application</button>
+    </form>
+</body>
+</html>

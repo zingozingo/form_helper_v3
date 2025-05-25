@@ -2,9 +2,13 @@
  * Field Detector Module
  * 
  * Detects and analyzes form fields on business registration forms.
- * This module helps identify input elements and extract their attributes.
- * Classifies fields based on their purpose in business registration.
+ * Uses hybrid knowledge system with common patterns and state-specific overrides.
  */
+
+// Import knowledge loader (will be loaded dynamically in extension context)
+let knowledgeLoader = null;
+let initializationPromise = null;
+let initializationAttempted = false;
 
 /**
  * Class for detecting and analyzing form fields
@@ -15,14 +19,19 @@ class FieldDetector {
    * @param {HTMLElement|Document} rootElement - The root element to search within (form or document)
    * @param {Object} options - Configuration options
    * @param {boolean} options.debug - Whether to enable debug mode for extra logging
+   * @param {string} options.state - State code for state-specific patterns
    */
   constructor(rootElement, options = {}) {
     this.root = rootElement || document;
     this.fields = [];
     this.fieldSummary = {};
     this.options = {
-      debug: options.debug || false
+      debug: options.debug || false,
+      state: options.state || null
     };
+    
+    // Initialize knowledge loader if available
+    this._initializeKnowledgeLoader();
     
     // Field type mappings
     this.fieldTypes = {
@@ -68,98 +77,183 @@ class FieldDetector {
       other: []
     };
     
-    // Knowledge base for field classification
-    this.fieldClassification = {
-      // Business identity fields
-      businessName: {
-        patterns: [
-          /\bbusiness\s*name\b/i,
-          /\bcompany\s*name\b/i,
-          /\bentity\s*name\b/i,
-          /\borganization\s*name\b/i,
-          /\blegal\s*name\b/i,
-          /\btrade\s*name\b/i,
-          /\bfirm\s*name\b/i,
-          /\bname\s*of\s*(business|company|entity|organization)\b/i
-        ],
-        namePatterns: [
-          /\bname\b/i,
-          /\bbusiness[-_]?name\b/i,
-          /\bcompany[-_]?name\b/i
-        ],
-        idPatterns: [
-          /\bname\b/i,
-          /\bbusinessName\b/i,
-          /\bcompanyName\b/i,
-          /\bentityName\b/i
-        ],
-        fieldTypes: ['text'],
-        importance: 'high'
+    // Field patterns (will be populated from knowledge loader)
+    this.fieldPatterns = {};
+    
+    // Load field patterns
+    this._loadFieldPatterns();
+  }
+  
+  /**
+   * Initialize the knowledge loader
+   * @private
+   */
+  async _initializeKnowledgeLoader() {
+    // Return existing promise if initialization is in progress
+    if (initializationPromise) {
+      return initializationPromise;
+    }
+    
+    // Don't retry if already attempted and failed
+    if (initializationAttempted && !knowledgeLoader) {
+      return null;
+    }
+    
+    initializationPromise = this._doInitialize();
+    return initializationPromise;
+  }
+  
+  async _doInitialize() {
+    initializationAttempted = true;
+    
+    try {
+      // Try different loading methods based on context
+      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
+        try {
+          // Method 1: Try dynamic import first (preferred)
+          const moduleUrl = chrome.runtime.getURL('modules/knowledgeLoader.js');
+          const module = await import(moduleUrl);
+          knowledgeLoader = module.default || module.knowledgeLoader || module;
+          
+          console.log('[BRA-FieldDetector] Knowledge loader loaded via dynamic import');
+          console.log('[BRA-FieldDetector] Module type:', typeof module);
+          console.log('[BRA-FieldDetector] Module keys:', Object.keys(module || {}));
+          console.log('[BRA-FieldDetector] KnowledgeLoader type:', typeof knowledgeLoader);
+          console.log('[BRA-FieldDetector] KnowledgeLoader keys:', Object.keys(knowledgeLoader || {}));
+        } catch (importError) {
+          console.warn('[BRA-FieldDetector] Dynamic import failed, trying fetch method');
+          console.warn('Import error:', importError.message);
+          
+          // Method 2: Fallback to fetch and eval
+          const scriptUrl = chrome.runtime.getURL('modules/knowledgeLoader.js');
+          const response = await fetch(scriptUrl);
+          
+          if (!response.ok) {
+            throw new Error('Failed to fetch knowledge loader: ' + response.status);
+          }
+          
+          const scriptText = await response.text();
+          
+          // Create a more robust module loader
+          try {
+            // Create a module scope
+            const moduleScope = {};
+            const wrappedCode = [
+              '(function(exports) {',
+              scriptText,
+              '\nif (typeof knowledgeLoader !== "undefined") {',
+              '  exports.knowledgeLoader = knowledgeLoader;',
+              '}',
+              '})(arguments[0]);'
+            ].join('\n');
+            
+            // Execute in isolated scope
+            const executeModule = new Function(wrappedCode);
+            executeModule(moduleScope);
+            
+            // Extract the loader
+            knowledgeLoader = moduleScope.knowledgeLoader;
+            
+            console.log('[BRA-FieldDetector] Knowledge loader loaded via fetch method');
+            console.log('[BRA-FieldDetector] KnowledgeLoader type:', typeof knowledgeLoader);
+            console.log('[BRA-FieldDetector] KnowledgeLoader keys:', Object.keys(knowledgeLoader || {}));
+            console.log('[BRA-FieldDetector] Is KnowledgeLoader a class?:', knowledgeLoader && knowledgeLoader.constructor && knowledgeLoader.constructor.name);
+          } catch (execError) {
+            console.error('[BRA-FieldDetector] Failed to execute knowledge loader script');
+            console.error('Execution error:', execError.message);
+            throw execError;
+          }
+        }
+        
+        // Initialize the knowledge loader if it exists
+        if (knowledgeLoader) {
+          // Check if it's an instance with initialize method
+          if (typeof knowledgeLoader.initialize === 'function') {
+            await knowledgeLoader.initialize();
+            console.log('[BRA-FieldDetector] Knowledge loader initialized successfully');
+          } 
+          // Check if it's a class that needs instantiation
+          else if (typeof knowledgeLoader === 'function' && knowledgeLoader.prototype && knowledgeLoader.prototype.initialize) {
+            console.log('[BRA-FieldDetector] Knowledge loader is a class, instantiating...');
+            knowledgeLoader = new knowledgeLoader();
+            await knowledgeLoader.initialize();
+            console.log('[BRA-FieldDetector] Knowledge loader instantiated and initialized');
+          }
+          // Check for alternative method names
+          else if (typeof knowledgeLoader.init === 'function') {
+            await knowledgeLoader.init();
+            console.log('[BRA-FieldDetector] Knowledge loader initialized using init() method');
+          }
+          else {
+            console.warn('[BRA-FieldDetector] Knowledge loader loaded but no initialize method found');
+            console.warn('[BRA-FieldDetector] Available methods:', Object.getOwnPropertyNames(knowledgeLoader).filter(prop => typeof knowledgeLoader[prop] === 'function'));
+          }
+        } else {
+          console.error('[BRA-FieldDetector] Knowledge loader module not found');
+          knowledgeLoader = null;
+        }
+      }
+    } catch (error) {
+      // Simple error logging
+      console.error('[BRA-FieldDetector] Could not initialize knowledge loader');
+      console.error('Error:', error.message);
+      knowledgeLoader = null;
+    } finally {
+      initializationPromise = null;
+    }
+    
+    return knowledgeLoader;
+  }
+  
+  /**
+   * Load field patterns from knowledge loader
+   * @private
+   */
+  async _loadFieldPatterns() {
+    try {
+      if (knowledgeLoader && typeof knowledgeLoader.getFieldPatterns === 'function') {
+        this.fieldPatterns = await knowledgeLoader.getFieldPatterns(this.options.state);
+        console.log('[BRA-FieldDetector] Loaded field patterns', this.options.state ? `for state ${this.options.state}` : '(common)');
+      } else {
+        // Fallback patterns if knowledge loader not available
+        this._loadFallbackPatterns();
+      }
+    } catch (error) {
+      console.error('[BRA-FieldDetector] Error loading field patterns:', error);
+      this._loadFallbackPatterns();
+    }
+  }
+  
+  /**
+   * Load fallback patterns when knowledge loader is unavailable
+   * @private
+   */
+  _loadFallbackPatterns() {
+    this.fieldPatterns = {
+      business_name: {
+        patterns: ["business.*name", "company.*name", "entity.*name"],
+        attributes: ["business", "company", "entity"],
+        priority: 90
       },
-      
-      // Business identifier fields
-      businessId: {
-        patterns: [
-          /\bbusiness\s*(id|identifier|number)\b/i,
-          /\bentity\s*(id|identifier|number|code)\b/i,
-          /\bregistration\s*(id|number)\b/i,
-          /\bcompany\s*(id|identifier|number)\b/i,
-          /\borganization\s*(id|identifier|number)\b/i,
-          /\baccount\s*(id|number)\b/i
-        ],
-        namePatterns: [
-          /\bid\b/i,
-          /\bnumber\b/i,
-          /\bidentifier\b/i,
-          /\bregistration[-_]?number\b/i,
-          /\bentity[-_]?id\b/i
-        ],
-        idPatterns: [
-          /\bid\b/i,
-          /\bentityId\b/i,
-          /\bbusinessId\b/i,
-          /\bidentifier\b/i,
-          /\bnumber\b/i
-        ],
-        fieldTypes: ['text', 'number'],
-        importance: 'medium'
+      ein: {
+        patterns: ["ein", "employer.*identification", "federal.*tax.*id"],
+        attributes: ["ein", "fein"],
+        priority: 95
       },
-      
-      // Entity type selection
-      entityType: {
-        patterns: [
-          /\bentity\s*type\b/i,
-          /\bbusiness\s*type\b/i,
-          /\borganization\s*type\b/i,
-          /\bcompany\s*type\b/i,
-          /\btype\s*of\s*(entity|business|organization|company)\b/i,
-          /\bstructure\b/i,
-          /\bbusiness\s*structure\b/i,
-          /\bform\s*of\s*organization\b/i,
-          /\b(select|choose)\s*(an|your|the)\s*(entity|business)\s*type\b/i
-        ],
-        namePatterns: [
-          /\btype\b/i,
-          /\bentity[-_]?type\b/i,
-          /\bbusiness[-_]?type\b/i,
-          /\bstructure\b/i
-        ],
-        idPatterns: [
-          /\bentityType\b/i,
-          /\bbusinessType\b/i,
-          /\btype\b/i,
-          /\bstructure\b/i,
-          /\borganizationType\b/i
-        ],
-        fieldTypes: ['select', 'radio'],
-        options: [
-          /llc|limited\s*liability\s*company/i,
-          /corporation|incorporated|inc\.?$/i,
-          /partnership/i,
-          /sole\s*proprietor/i,
-          /nonprofit|non-profit/i
-        ],
-        importance: 'high'
+      email: {
+        patterns: ["email", "e-mail"],
+        attributes: ["email"],
+        priority: 85
+      },
+      phone: {
+        patterns: ["phone", "telephone"],
+        attributes: ["phone", "tel"],
+        priority: 85
+      },
+      entity_type: {
+        patterns: ["entity.*type", "business.*type"],
+        attributes: ["entity-type", "business-type"],
+        priority: 85
       }
     };
   }
@@ -168,11 +262,14 @@ class FieldDetector {
    * Find all input fields within the root element
    * @returns {Array} Array of field objects with their attributes
    */
-  detectFields() {
+  async detectFields() {
     try {
       console.log('[BRA-FieldDetector] Starting field detection');
       this.fields = [];
       this.fieldSummary = {};
+      
+      // Ensure patterns are loaded
+      await this._loadFieldPatterns();
       
       // Initialize field summary
       Object.keys(this.fieldGroups).forEach(group => {
@@ -190,6 +287,9 @@ class FieldDetector {
           if (field) {
             // Add index for reference
             field.index = index;
+            
+            // Classify the field
+            field.classification = this._classifyField(field);
             
             // Add field to collection
             this.fields.push(field);
@@ -334,47 +434,6 @@ class FieldDetector {
   }
 
   /**
-   * Classify detected fields by purpose
-   * Adds classification information to each field
-   * @returns {Object} Classification summary
-   */
-  classifyFields() {
-    try {
-      console.log('[BRA-FieldDetector] Classifying fields by purpose');
-      
-      // Track classification statistics
-      const stats = {
-        totalFields: this.fields.length,
-        classifiedFields: 0,
-        categories: {}
-      };
-      
-      // Classify each field
-      this.fields.forEach(field => {
-        try {
-          const classification = this._classifyField(field);
-          
-          // Attach classification to field
-          field.classification = classification;
-          
-          // Update statistics
-          if (classification && classification.category) {
-            stats.classifiedFields++;
-            stats.categories[classification.category] = (stats.categories[classification.category] || 0) + 1;
-          }
-        } catch (error) {
-          console.error('[BRA-FieldDetector] Error classifying field:', error);
-        }
-      });
-      
-      return stats;
-    } catch (error) {
-      console.error('[BRA-FieldDetector] Error in field classification:', error);
-      return { totalFields: this.fields.length, classifiedFields: 0, categories: {} };
-    }
-  }
-  
-  /**
    * Classify a single field by its purpose
    * @param {Object} field - The field to classify
    * @returns {Object|null} Classification information or null if unclassified
@@ -389,100 +448,87 @@ class FieldDetector {
         return null;
       }
       
-      // Build a text corpus from field attributes to analyze
-      let textToAnalyze = [
-        field.name || '',
-        field.id || '',
-        field.placeholder || '',
-      ].join(' ').toLowerCase();
+      // Build match context for scoring
+      const matchContext = {
+        label: field.label?.text?.toLowerCase() || '',
+        name: field.name?.toLowerCase() || '',
+        id: field.id?.toLowerCase() || '',
+        placeholder: field.placeholder?.toLowerCase() || '',
+        type: field.type
+      };
       
-      // Add label text if available
-      if (field.label && field.label.text) {
-        textToAnalyze += ' ' + field.label.text.toLowerCase();
-      }
+      let bestMatch = null;
+      let bestScore = 0;
       
-      // Track matches for each category
-      const matches = {};
-      let bestCategory = null;
-      let bestConfidence = 0;
-      
-      // Check each category in the classification knowledge base
-      for (const [category, rules] of Object.entries(this.fieldClassification)) {
-        let categoryScore = 0;
-        let matchDetails = {};
-        
-        // Check the field type first
-        if (rules.fieldTypes && rules.fieldTypes.includes(field.type)) {
-          categoryScore += 10;
-          matchDetails.typeMatch = true;
-        }
-        
-        // Check label patterns (highest weight)
-        if (field.label && field.label.text && rules.patterns) {
-          for (const pattern of rules.patterns) {
-            if (pattern.test(field.label.text)) {
-              categoryScore += 40;
-              matchDetails.labelMatch = pattern.toString();
-              break;
-            }
-          }
-        }
-        
-        // Check name attribute patterns
-        if (field.name && rules.namePatterns) {
-          for (const pattern of rules.namePatterns) {
-            if (pattern.test(field.name)) {
-              categoryScore += 30;
-              matchDetails.nameMatch = pattern.toString();
-              break;
-            }
-          }
-        }
-        
-        // Check id attribute patterns
-        if (field.id && rules.idPatterns) {
-          for (const pattern of rules.idPatterns) {
-            if (pattern.test(field.id)) {
-              categoryScore += 20;
-              matchDetails.idMatch = pattern.toString();
-              break;
-            }
-          }
-        }
-        
-        // Apply importance weighting
-        if (rules.importance === 'high') {
-          categoryScore *= 1.2;
-        } else if (rules.importance === 'low') {
-          categoryScore *= 0.8;
-        }
-        
-        // Record the match
-        matches[category] = {
-          score: categoryScore,
-          details: matchDetails
+      // Check each field pattern
+      for (const [fieldType, config] of Object.entries(this.fieldPatterns)) {
+        let score = 0;
+        let matchDetails = {
+          patternMatches: 0,
+          exactMatch: false,
+          attributeMatch: false,
+          stateSpecific: this.options.state && config.stateSpecific
         };
         
-        // Track best match
-        if (categoryScore > bestConfidence) {
-          bestCategory = category;
-          bestConfidence = categoryScore;
+        // Check patterns against label (highest weight)
+        if (matchContext.label && config.patterns) {
+          for (const pattern of config.patterns) {
+            const regex = new RegExp(pattern, 'i');
+            if (regex.test(matchContext.label)) {
+              score += 40;
+              matchDetails.patternMatches++;
+              if (matchContext.label === pattern.toLowerCase()) {
+                matchDetails.exactMatch = true;
+              }
+            }
+          }
+        }
+        
+        // Check attribute patterns
+        if (config.attributes) {
+          for (const attr of config.attributes) {
+            const attrRegex = new RegExp(`\\b${attr}\\b`, 'i');
+            if (attrRegex.test(matchContext.name) || 
+                attrRegex.test(matchContext.id) || 
+                attrRegex.test(matchContext.placeholder)) {
+              score += 20;
+              matchDetails.attributeMatch = true;
+              matchDetails.patternMatches++;
+            }
+          }
+        }
+        
+        // Type matching bonus
+        if (config.validation === 'select' && field.type === 'select') {
+          score += 10;
+        } else if (config.validation === field.type) {
+          score += 5;
+        }
+        
+        // Apply priority weighting
+        if (config.priority) {
+          score *= (config.priority / 100);
+        }
+        
+        // Calculate confidence
+        if (score > bestScore) {
+          matchDetails.baseConfidence = Math.min(score, 100);
+          const confidence = (knowledgeLoader && typeof knowledgeLoader.getFieldConfidence === 'function') ? 
+            knowledgeLoader.getFieldConfidence(fieldType, matchDetails) : 
+            matchDetails.baseConfidence;
+          
+          bestMatch = {
+            category: fieldType,
+            confidence: confidence,
+            details: matchDetails
+          };
+          bestScore = score;
         }
       }
       
-      // Only return a classification if confidence is above a minimum threshold
-      if (bestConfidence >= 20) {
-        // Normalize confidence to a 0-100 scale
-        // Score of 60 or higher is treated as 100% confidence
-        const normalizedConfidence = Math.min(100, Math.round((bestConfidence / 60) * 100));
-        
-        return {
-          category: bestCategory,
-          confidence: normalizedConfidence
-        };
-      }
+      // Return best match if confidence is sufficient
+      return bestScore >= 20 ? bestMatch : null;
       
-      return null;
     } catch (error) {
       console.error('[BRA-FieldDetector] Error classifying field:', error);
       return null;
@@ -501,6 +547,15 @@ class FieldDetector {
       field.classification.category === category &&
       field.classification.confidence >= minConfidence
     );
+  }
+  
+  /**
+   * Update state context for field detection
+   * @param {string} stateCode - Two-letter state code
+   */
+  async updateState(stateCode) {
+    this.options.state = stateCode;
+    await this._loadFieldPatterns();
   }
 }
 
