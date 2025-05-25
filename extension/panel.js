@@ -13,6 +13,9 @@ const autoFillButton = document.getElementById('auto-fill-button');
 const mainContent = document.getElementById('main-content');
 const errorContainer = document.getElementById('error-container');
 
+// DOM elements - Fields Section
+const fieldsList = document.getElementById('fields-list');
+
 // DOM elements - Top confidence meter
 const confidenceMeter = document.getElementById('confidence-meter');
 const confidenceBarTop = document.getElementById('confidence-bar-top');
@@ -137,7 +140,9 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
         isDetected: message.isDetected,
         confidence: message.confidence,
         state: message.state,
-        classifiedFields: message.fields
+        classifiedFields: message.fields,
+        fields: message.fieldData || [],
+        uiData: message.uiData || null
       }
     };
     
@@ -691,6 +696,9 @@ function updateUI(result) {
   // Only update the top confidence meter - no duplicate displays
   updateConfidenceMeter(result);
   
+  // Update fields display
+  updateFieldsDisplay(result);
+  
   // Status indicator removed - confidence meter shows detection status
 }
 
@@ -769,6 +777,294 @@ function updateConfidenceMeter(result) {
 function showNoDetection() {
   // Status indicator removed - only update confidence meter
   updateConfidenceMeter(null);
+  // Clear fields display
+  updateFieldsDisplay(null);
+}
+
+// Update the fields display with detected fields
+function updateFieldsDisplay(result) {
+  console.log('[BRA Panel] updateFieldsDisplay called with:', result);
+  
+  if (!fieldsList) {
+    console.error('[BRA Panel] Fields list element not found!');
+    return;
+  }
+  
+  // Clear existing content
+  fieldsList.innerHTML = '';
+  
+  // Check if we have field detection results
+  if (!result || !result.fieldDetection || !result.isBusinessRegistrationForm) {
+    fieldsList.innerHTML = '<div class="no-fields-message">No fields detected yet</div>';
+    return;
+  }
+  
+  // Important business field categories to display
+  const importantCategories = [
+    'business_name', 'entity_type', 'ein', 'tax_id', 'ssn',
+    'business_address', 'address', 'city', 'state', 'zip',
+    'email', 'phone', 'fax', 'dba', 'trade_name',
+    'owner_name', 'registered_agent', 'naics_code',
+    'other' // Include unclassified fields too
+  ];
+  
+  // Extract all fields first, then handle classification
+  let allFields = [];
+  
+  // Try to get fields from uiData categories (preferred source)
+  if (result.fieldDetection && result.fieldDetection.uiData && result.fieldDetection.uiData.categories) {
+    console.log('[BRA Panel] Found uiData categories:', result.fieldDetection.uiData.categories);
+    const categories = result.fieldDetection.uiData.categories;
+    
+    // Extract ALL fields from each category
+    Object.keys(categories).forEach(categoryName => {
+      const category = categories[categoryName];
+      if (category.fields && Array.isArray(category.fields)) {
+        console.log(`[BRA Panel] Category "${categoryName}" has ${category.fields.length} fields`);
+        // Add fields while preserving their properties
+        category.fields.forEach(field => {
+          // Ensure field has all necessary properties
+          const fieldWithCategory = {
+            ...field,
+            categoryName: categoryName
+          };
+          allFields.push(fieldWithCategory);
+        });
+      }
+    });
+  }
+  // Fallback: Try to get from fields array
+  else if (result.fieldDetection && result.fieldDetection.fields && Array.isArray(result.fieldDetection.fields)) {
+    console.log('[BRA Panel] Found fields array:', result.fieldDetection.fields);
+    allFields = result.fieldDetection.fields;
+  }
+  
+  console.log(`[BRA Panel] Total fields found: ${allFields.length}`);
+  
+  // Process fields - show classified ones and attempt to classify unclassified ones
+  let fieldsToDisplay = [];
+  
+  allFields.forEach(field => {
+    console.log('[BRA Panel] Processing field:', field);
+    
+    // Get field label for classification - try all possible sources
+    let fieldLabel = '';
+    if (field.label && typeof field.label === 'object') {
+      if (field.label.text) {
+        fieldLabel = field.label.text.toLowerCase();
+      } else if (field.label.value) {
+        fieldLabel = field.label.value.toLowerCase();
+      } else {
+        // Try to extract from object
+        fieldLabel = JSON.stringify(field.label).toLowerCase();
+      }
+    } else if (typeof field.label === 'string') {
+      fieldLabel = field.label.toLowerCase();
+    } else if (field.name) {
+      fieldLabel = field.name.toLowerCase();
+    } else if (field.placeholder) {
+      fieldLabel = field.placeholder.toLowerCase();
+    } else if (field.id) {
+      fieldLabel = field.id.toLowerCase();
+    } else if (field.type) {
+      fieldLabel = field.type.toLowerCase();
+    }
+    
+    console.log(`[BRA Panel] Field label extracted: "${fieldLabel}"`);
+    
+    // Also check attributes if available
+    if (!fieldLabel && field.attributes) {
+      if (field.attributes.placeholder) fieldLabel = field.attributes.placeholder.toLowerCase();
+      else if (field.attributes.name) fieldLabel = field.attributes.name.toLowerCase();
+      else if (field.attributes.id) fieldLabel = field.attributes.id.toLowerCase();
+    }
+    
+    // Check if field has classification
+    let classification = field.classification;
+    
+    // If no classification or classification is 'other', try to classify based on label
+    if (!classification || !classification.category || classification.category === 'other') {
+      console.log(`[BRA Panel] Attempting to classify field with label: "${fieldLabel}"`);
+      
+      // Pattern matching for common business fields - more flexible
+      if (fieldLabel.match(/business.*name|legal.*name|company.*name|organization.*name/i)) {
+        classification = { category: 'business_name', confidence: 85 };
+      } else if (fieldLabel.match(/entity|organization.*type|business.*type|structure|incorporation/i)) {
+        classification = { category: 'entity_type', confidence: 85 };
+      } else if (fieldLabel.match(/ein|employer.*id|federal.*id|tax.*number/i)) {
+        classification = { category: 'ein', confidence: 85 };
+      } else if (fieldLabel.match(/tax.*id|state.*id|id.*type/i)) {
+        classification = { category: 'tax_id', confidence: 85 };
+      } else if (fieldLabel.match(/dba|doing.*business|trade.*name|fictitious/i)) {
+        classification = { category: 'dba', confidence: 85 };
+      } else if (fieldLabel.match(/address|street|location/i) && !fieldLabel.includes('email')) {
+        classification = { category: 'address', confidence: 85 };
+      } else if (fieldLabel.match(/city|town|municipality/i)) {
+        classification = { category: 'city', confidence: 85 };
+      } else if (fieldLabel.match(/state|province|region/i) && !fieldLabel.includes('statement')) {
+        classification = { category: 'state', confidence: 85 };
+      } else if (fieldLabel.match(/zip|postal|post.*code/i)) {
+        classification = { category: 'zip', confidence: 85 };
+      } else if (fieldLabel.match(/email|e-mail|electronic.*mail/i)) {
+        classification = { category: 'email', confidence: 85 };
+      } else if (fieldLabel.match(/phone|telephone|tel|mobile|contact.*number/i)) {
+        classification = { category: 'phone', confidence: 85 };
+      } else if (fieldLabel.match(/owner|principal|proprietor|member.*name/i)) {
+        classification = { category: 'owner_name', confidence: 85 };
+      } else if (fieldLabel.match(/agent|registered.*agent|statutory/i)) {
+        classification = { category: 'registered_agent', confidence: 85 };
+      } else if (fieldLabel.match(/naics|industry.*code|business.*code/i)) {
+        classification = { category: 'naics_code', confidence: 85 };
+      } else if (fieldLabel.match(/ssn|social.*security/i)) {
+        classification = { category: 'ssn', confidence: 85 };
+      } else if (fieldLabel.match(/fax|facsimile/i)) {
+        classification = { category: 'fax', confidence: 85 };
+      }
+      
+      // If still no match but it's a text field with business-related keywords, classify as other
+      if (!classification && fieldLabel.match(/business|company|organization|corporate|llc|inc|ltd/i)) {
+        classification = { category: 'other', confidence: 70 };
+      }
+      
+      // Update field classification if we found a match
+      if (classification) {
+        field.classification = classification;
+        console.log(`[BRA Panel] Classified as: ${classification.category}`);
+      }
+    }
+    
+    // Add field if it has a valid classification in important categories
+    if (classification && classification.category && importantCategories.includes(classification.category)) {
+      fieldsToDisplay.push(field);
+    }
+  });
+  
+  console.log(`[BRA Panel] Fields to display: ${fieldsToDisplay.length}`);
+  
+  // If still no fields but we have unclassified fields, show some of them
+  if (fieldsToDisplay.length === 0 && allFields.length > 0) {
+    console.log('[BRA Panel] No classified fields, showing first 5 unclassified fields');
+    fieldsToDisplay = allFields.slice(0, 5).map(field => {
+      if (!field.classification) {
+        field.classification = { category: 'other', confidence: 50 };
+      }
+      return field;
+    });
+  }
+  
+  let classifiedFields = fieldsToDisplay;
+  
+  console.log('[BRA Panel] Classified fields to display:', classifiedFields);
+  
+  if (classifiedFields.length === 0) {
+    // Check if we have field count but no details
+    const fieldCount = result.fieldDetection.classifiedFields || 0;
+    if (fieldCount > 0) {
+      fieldsList.innerHTML = `<div class="no-fields-message">Found ${fieldCount} fields - waiting for classification details...</div>`;
+    } else {
+      fieldsList.innerHTML = '<div class="no-fields-message">No business fields detected yet</div>';
+    }
+    return;
+  }
+  
+  // Sort fields by their DOM position (top to bottom order on the form)
+  classifiedFields.sort((a, b) => {
+    // Try to get position from various sources
+    let posA = Number.MAX_SAFE_INTEGER;
+    let posB = Number.MAX_SAFE_INTEGER;
+    
+    // Check for explicit position/index
+    if (a.position !== undefined) posA = a.position;
+    else if (a.index !== undefined) posA = a.index;
+    else if (a.order !== undefined) posA = a.order;
+    else if (a.domIndex !== undefined) posA = a.domIndex;
+    
+    if (b.position !== undefined) posB = b.position;
+    else if (b.index !== undefined) posB = b.index;
+    else if (b.order !== undefined) posB = b.order;
+    else if (b.domIndex !== undefined) posB = b.domIndex;
+    
+    // If we have element references, try to compare their positions
+    if (a.element && b.element && a.element.compareDocumentPosition) {
+      const position = a.element.compareDocumentPosition(b.element);
+      if (position & Node.DOCUMENT_POSITION_FOLLOWING) {
+        return -1; // a comes before b
+      } else if (position & Node.DOCUMENT_POSITION_PRECEDING) {
+        return 1; // b comes before a
+      }
+    }
+    
+    // Fall back to position numbers if available
+    if (posA !== Number.MAX_SAFE_INTEGER || posB !== Number.MAX_SAFE_INTEGER) {
+      return posA - posB;
+    }
+    
+    // If no position info, maintain original order
+    return 0;
+  });
+  
+  console.log('[BRA Panel] Fields sorted by DOM position');
+  
+  // Create field items
+  classifiedFields.forEach(field => {
+    const fieldItem = document.createElement('div');
+    fieldItem.className = 'field-item';
+    
+    // Get field label - use same logic as classification
+    let label = '';
+    if (field.label && typeof field.label === 'object') {
+      if (field.label.text) {
+        label = field.label.text;
+      } else if (field.label.value) {
+        label = field.label.value;
+      } else {
+        // Try to extract meaningful text from object
+        const labelStr = JSON.stringify(field.label);
+        // Remove JSON syntax and extract text
+        label = labelStr.replace(/[{}"]/g, '').split(':').pop() || 'Field';
+      }
+    } else if (typeof field.label === 'string') {
+      label = field.label;
+    } else if (field.name) {
+      label = field.name;
+    } else if (field.placeholder) {
+      label = field.placeholder;
+    } else if (field.id) {
+      // Convert ID to readable format (e.g., business_name -> Business Name)
+      label = field.id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    } else if (field.fieldName) {
+      label = field.fieldName;
+    } else {
+      label = 'Unnamed field';
+    }
+    
+    // Clean up the label
+    label = String(label).trim();
+    if (label.length > 40) {
+      label = label.substring(0, 37) + '...';
+    }
+    
+    // Get field type/classification
+    const fieldType = field.classification.category || 'unknown';
+    const confidence = field.classification.confidence || 0;
+    
+    // Create label element
+    const labelEl = document.createElement('div');
+    labelEl.className = 'field-label';
+    labelEl.textContent = label;
+    labelEl.title = `${label} (${confidence}% confidence)`; // Tooltip with confidence
+    
+    // Create type element with formatted text
+    const typeEl = document.createElement('div');
+    typeEl.className = `field-type ${fieldType.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    typeEl.textContent = fieldType.replace(/_/g, ' ');
+    
+    fieldItem.appendChild(labelEl);
+    fieldItem.appendChild(typeEl);
+    fieldsList.appendChild(fieldItem);
+  });
+  
+  console.log(`[BRA Panel] Displayed ${classifiedFields.length} classified fields`);
 }
 
 // Expose functions globally for debugging
@@ -871,10 +1167,77 @@ window.getCurrentDetection = function() {
   });
 };
 
+// Helper to test fields display with sample data
+window.testFields = function() {
+  const sampleResult = {
+    isBusinessRegistrationForm: true,
+    confidenceScore: 79,
+    state: 'DC',
+    fieldDetection: {
+      isDetected: true,
+      confidence: 79,
+      state: 'DC',
+      classifiedFields: 6,
+      uiData: {
+        categories: {
+          business_info: {
+            label: 'Business Information',
+            fields: [
+              { 
+                label: { text: 'Legal Business Name' }, 
+                name: 'business_name',
+                classification: { category: 'business_name', confidence: 95 }
+              },
+              { 
+                label: { text: 'Entity Type' }, 
+                name: 'entity_type',
+                classification: { category: 'entity_type', confidence: 90 }
+              },
+              { 
+                label: { text: 'Doing Business As (DBA)' }, 
+                name: 'trade_name',
+                classification: { category: 'dba', confidence: 85 }
+              }
+            ]
+          },
+          tax_info: {
+            label: 'Tax Information',
+            fields: [
+              { 
+                label: { text: 'Federal EIN' }, 
+                name: 'ein',
+                classification: { category: 'ein', confidence: 92 }
+              }
+            ]
+          },
+          contact_info: {
+            label: 'Contact Information',
+            fields: [
+              { 
+                label: { text: 'Business Email' }, 
+                name: 'email',
+                classification: { category: 'email', confidence: 88 }
+              },
+              { 
+                label: { text: 'Business Phone' }, 
+                name: 'phone',
+                classification: { category: 'phone', confidence: 87 }
+              }
+            ]
+          }
+        }
+      }
+    }
+  };
+  updateUI(sampleResult);
+};
+
 console.log('Debug helpers available:');
 console.log('- updateUI(result) - Update UI with detection result');
 console.log('- updateConfidenceMeter(result) - Update just the confidence meter');
+console.log('- updateFieldsDisplay(result) - Update just the fields display');
 console.log('- testDetection(confidence, state) - Test with sample data');
+console.log('- testFields() - Test fields display with sample data');
 console.log('- checkElements() - Check DOM element states');
 console.log('- debugDetection() - Debug the detection message flow');
 console.log('- getCurrentDetection() - Get and display current detection from background');

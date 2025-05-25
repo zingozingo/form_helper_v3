@@ -112,10 +112,122 @@ body {
 /* Views */
 .view {
   padding: 15px;
-  background-color: #f5f7fa;
-  flex-grow: 0;
+}
+
+/* Fields Detected Section */
+.fields-section {
+  margin-bottom: 20px;
+}
+
+.section-header {
+  font-size: 16px;
+  font-weight: 600;
+  color: #2e5cb8;
+  margin: 0 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.fields-container {
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  padding: 12px;
+  max-height: 300px;
   overflow-y: auto;
-  max-height: 50%;
+  border: 1px solid #e0e0e0;
+}
+
+.fields-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.field-item {
+  background-color: white;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: background-color 0.2s;
+}
+
+.field-item:hover {
+  background-color: #f0f4ff;
+}
+
+.field-label {
+  font-weight: 500;
+  color: #333;
+  flex: 1;
+  margin-right: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field-type {
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  background-color: #e8f0fe;
+  color: #1967d2;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.field-type.business_name {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.field-type.entity_type {
+  background-color: #fff3e0;
+  color: #f57c00;
+}
+
+.field-type.ein,
+.field-type.tax_id {
+  background-color: #fce4ec;
+  color: #c2185b;
+}
+
+.field-type.address,
+.field-type.business_address,
+.field-type.city,
+.field-type.state,
+.field-type.zip {
+  background-color: #f3e5f5;
+  color: #7b1fa2;
+}
+
+.field-type.email,
+.field-type.phone,
+.field-type.fax {
+  background-color: #e3f2fd;
+  color: #1565c0;
+}
+
+.field-type.dba,
+.field-type.trade_name {
+  background-color: #e0f2f1;
+  color: #00796b;
+}
+
+.field-type.unknown,
+.field-type.other {
+  background-color: #f5f5f5;
+  color: #616161;
+}
+
+.no-fields-message {
+  text-align: center;
+  color: #666;
+  font-style: italic;
+  padding: 20px;
+}
   min-height: 100px;
 }
 

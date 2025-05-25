@@ -1106,7 +1106,9 @@ class FieldDetector {
         required: field.required,
         category: category,
         confidence: field.classification.confidence,
-        value: field.value
+        value: field.value,
+        index: field.index,  // Preserve DOM order
+        classification: field.classification  // Include full classification
       });
     });
     

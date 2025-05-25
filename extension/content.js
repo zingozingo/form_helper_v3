@@ -1073,7 +1073,7 @@ async function detectBusinessForm() {
       }
     });
     
-    // Also send updateDetection message with the actual calculated confidence score
+    // Also send updateDetection message with the actual calculated confidence score and field data
     console.log('[BRA Content] Sending updateDetection with actual confidence score:', confidenceScore);
     chrome.runtime.sendMessage({
       type: 'updateDetection',
@@ -1082,7 +1082,9 @@ async function detectBusinessForm() {
       confidence: confidenceScore,  // Use the actual calculated confidence score
       readinessScore: fieldDetectionResults?.readinessScore,
       validationScore: fieldDetectionResults?.validationScore,
-      fields: classificationStats?.classified || 0
+      fields: classificationStats?.classified || 0,
+      fieldData: fieldDetectionResults?.fields || [],  // Include actual field data
+      uiData: fieldDetectionResults?.uiData || null    // Include UI-ready data
     }, function(response) {
       if (chrome.runtime.lastError) {
         console.error('[BRA Content] Error sending updateDetection with actual confidence:', chrome.runtime.lastError);

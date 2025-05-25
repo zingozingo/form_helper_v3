@@ -204,7 +204,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       detectionResults[tabId].fieldDetection = {
         isDetected: message.isDetected,
         confidence: message.confidence,
-        state: message.state
+        state: message.state,
+        fields: message.fieldData || [],
+        uiData: message.uiData || null,
+        classifiedFields: message.fields || 0
       };
       
       console.log('[BRA Background] Stored detection result for tab', tabId);
