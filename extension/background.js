@@ -136,6 +136,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   
   // Handle detection result from content script
   if (message.action === 'formDetected' && tabId) {
+    console.log('[BRA Background] Received formDetected from tab:', tabId);
+    console.log('[BRA Background] Detection result:', message.result);
+    
     // Store the result
     detectionResults[tabId] = message.result;
     
@@ -150,7 +153,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       false
     );
     
-    console.log('[BRA] Stored detection for tab', tabId);
+    console.log('[BRA Background] Stored detection for tab', tabId);
+    console.log('[BRA Background] Current stored results:', Object.keys(detectionResults));
+    
+    // Notify the panel about the detection update
+    try {
+      chrome.runtime.sendMessage({
+        action: 'detectionUpdated',
+        tabId: tabId,
+        result: message.result
+      }, function(response) {
+        if (chrome.runtime.lastError) {
+          console.log('[BRA Background] No panel listening for updates (this is normal)');
+        } else {
+          console.log('[BRA Background] Successfully notified panel of detection update');
+        }
+      });
+    } catch (error) {
+      console.log('[BRA Background] Could not notify panel:', error.message);
+    }
 
     // Acknowledge the message
     sendResponse({ 
@@ -158,6 +179,141 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       received: true,
       messageId: message.messageId
     });
+  }
+  
+  // Handle updateDetection message type from fieldDetector
+  if (message.type === 'updateDetection') {
+    console.log('[BRA Background] ===== RECEIVED updateDetection =====');
+    console.log('[BRA Background] From tab:', tabId);
+    console.log('[BRA Background] Message details:', {
+      type: message.type,
+      isDetected: message.isDetected,
+      state: message.state,
+      confidence: message.confidence,
+      fields: message.fields
+    });
+    
+    // Store in detection results if we have a tab ID
+    if (tabId) {
+      if (!detectionResults[tabId]) {
+        detectionResults[tabId] = {};
+      }
+      detectionResults[tabId].isBusinessRegistrationForm = message.isDetected;
+      detectionResults[tabId].confidenceScore = message.confidence;
+      detectionResults[tabId].state = message.state;
+      detectionResults[tabId].fieldDetection = {
+        isDetected: message.isDetected,
+        confidence: message.confidence,
+        state: message.state
+      };
+      
+      console.log('[BRA Background] Stored detection result for tab', tabId);
+      
+      // Update badge
+      updateBadge(tabId, message.isDetected, message.confidence, false);
+    }
+    
+    // Forward to panel with enhanced message
+    const panelMessage = {
+      action: 'detectionUpdated',
+      tabId: tabId,
+      result: detectionResults[tabId] || {
+        isBusinessRegistrationForm: message.isDetected,
+        confidenceScore: message.confidence,
+        state: message.state,
+        fieldDetection: {
+          isDetected: message.isDetected,
+          confidence: message.confidence,
+          state: message.state
+        }
+      }
+    };
+    
+    console.log('[BRA Background] Forwarding to panel:', panelMessage);
+    
+    // Try multiple methods to send to panel
+    try {
+      // Method 1: Direct runtime message
+      chrome.runtime.sendMessage(panelMessage, function(response) {
+        if (chrome.runtime.lastError) {
+          console.log('[BRA Background] Method 1 failed:', chrome.runtime.lastError.message);
+        } else {
+          console.log('[BRA Background] Method 1 success:', response);
+        }
+      });
+      
+      // Method 2: Also try sending directly as updateDetection
+      chrome.runtime.sendMessage({
+        type: 'updateDetection',
+        isDetected: message.isDetected,
+        state: message.state,
+        confidence: message.confidence,
+        fields: message.fields
+      }, function(response) {
+        if (chrome.runtime.lastError) {
+          console.log('[BRA Background] Method 2 failed:', chrome.runtime.lastError.message);
+        } else {
+          console.log('[BRA Background] Method 2 success:', response);
+        }
+      });
+    } catch (error) {
+      console.log('[BRA Background] Could not forward to panel:', error.message);
+    }
+    
+    sendResponse({ success: true, received: true });
+  }
+  
+  // Handle field detection update from fieldDetector module
+  if (message.action === 'fieldDetectionUpdate' && tabId) {
+    console.log('[BRA Background] Received fieldDetectionUpdate from tab:', tabId);
+    console.log('[BRA Background] Field detection data:', message);
+    
+    // Update or create detection result with field detection data
+    if (!detectionResults[tabId]) {
+      detectionResults[tabId] = {};
+    }
+    
+    // Update with field detection data
+    detectionResults[tabId].fieldDetection = {
+      state: message.state,
+      confidence: message.confidence,
+      validationScore: message.validationScore,
+      avgFieldConfidence: message.avgFieldConfidence,
+      isDetected: message.isDetected,
+      criticalFieldsFound: message.criticalFieldsFound,
+      categoryCount: message.categoryCount,
+      totalFields: message.totalFields,
+      classifiedFields: message.classifiedFields
+    };
+    
+    // Also set main detection properties if not already set
+    if (message.isDetected) {
+      detectionResults[tabId].isBusinessRegistrationForm = true;
+      detectionResults[tabId].confidenceScore = message.confidence;
+      detectionResults[tabId].state = message.state;
+    }
+    
+    console.log('[BRA Background] Updated detection with field data for tab', tabId);
+    
+    // Notify any open panels - use try-catch since panel might not be open
+    try {
+      chrome.runtime.sendMessage({
+        action: 'detectionUpdated',
+        tabId: tabId,
+        result: detectionResults[tabId]
+      }, function(response) {
+        // Check for errors but don't throw - panel might not be listening
+        if (chrome.runtime.lastError) {
+          console.log('[BRA Background] No panel listening for updates (this is normal):', chrome.runtime.lastError.message);
+        } else {
+          console.log('[BRA Background] Successfully notified panel of update');
+        }
+      });
+    } catch (error) {
+      console.log('[BRA Background] Could not notify panel (panel might be closed):', error.message);
+    }
+    
+    sendResponse({ success: true });
   }
   
   // Handle detection errors from content script
@@ -232,14 +388,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Send detection result to popup or panel
   if (message.action === 'getDetectionResult') {
     const requestedTabId = message.tabId || tabId;
+    console.log('[BRA Background] getDetectionResult request for tab:', requestedTabId);
+    console.log('[BRA Background] Available detection results:', Object.keys(detectionResults));
     
     if (requestedTabId && detectionResults[requestedTabId]) {
+      console.log('[BRA Background] Sending detection result:', detectionResults[requestedTabId]);
       sendResponse({ 
         success: true,
         result: detectionResults[requestedTabId],
         connected: isTabConnected(requestedTabId)
       });
     } else {
+      console.log('[BRA Background] No detection result for tab:', requestedTabId);
       // If we have errors, include them in the response
       const hasErrors = detectionErrors[requestedTabId] && detectionErrors[requestedTabId].length > 0;
       
@@ -318,7 +478,13 @@ chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) =
           chrome.tabs.sendMessage(tabs[0].id, {
             action: 'triggerDetection',
             retry: true
-          }).catch(e => console.error('[BRA] Failed to trigger retry:', e.message || 'Unknown error'));
+          }, function(response) {
+            if (chrome.runtime.lastError) {
+              console.error('[BRA] Failed to trigger retry:', chrome.runtime.lastError.message);
+            } else {
+              console.log('[BRA] Retry triggered successfully');
+            }
+          });
         }
       });
     }

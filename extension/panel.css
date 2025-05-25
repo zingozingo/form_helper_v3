@@ -20,6 +20,61 @@ body {
   height: 100%;
 }
 
+/* Confidence meter at top */
+.confidence-meter {
+  height: 25px;
+  background-color: #f5f5f5;
+  border-bottom: 1px solid #e0e0e0;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  flex-shrink: 0;
+}
+
+.confidence-bar-container {
+  position: relative;
+  width: 100%;
+  height: 16px;
+  background-color: #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.confidence-bar-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 0%;
+  background-color: #4caf50;
+  transition: width 0.3s ease, background-color 0.3s ease;
+  border-radius: 8px;
+}
+
+.confidence-bar-top.high {
+  background-color: #4caf50;
+}
+
+.confidence-bar-top.medium {
+  background-color: #ff9800;
+}
+
+.confidence-bar-top.low {
+  background-color: #f44336;
+}
+
+.confidence-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 11px;
+  font-weight: bold;
+  color: #333;
+  text-shadow: 0 0 2px rgba(255, 255, 255, 0.8);
+  white-space: nowrap;
+}
+
 /* User Navigation Header */
 .user-nav-header {
   display: flex;
@@ -52,57 +107,7 @@ body {
   color: #2e5cb8;
 }
 
-/* Main Header */
-header {
-  background-color: #2e5cb8;
-  color: white;
-  padding: 8px 12px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-}
-
-.status {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  width: 100%;
-}
-
-#status-indicator {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background-color: #ccc;
-  position: relative;
-  box-shadow: 0 0 4px rgba(0, 0, 0, 0.2);
-}
-
-#status-indicator.active {
-  background-color: #4caf50;
-  animation: pulse 2s infinite;
-}
-
-#status-indicator.warning {
-  background-color: #ff9800;
-}
-
-#status-indicator.error {
-  background-color: #f44336;
-}
-
-@keyframes pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.4);
-  }
-  70% {
-    box-shadow: 0 0 0 6px rgba(76, 175, 80, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(76, 175, 80, 0);
-  }
-}
+/* Main Header - Removed blue status bar */
 
 /* Views */
 .view {

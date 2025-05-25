@@ -334,6 +334,53 @@ class FieldDetector {
       const readiness = this._checkReadiness(summary, validation);
       this._logReadinessCheck(readiness);
       
+      // Call the callback if provided (for content script context)
+      if (this.options.onDetectionComplete && typeof this.options.onDetectionComplete === 'function') {
+        console.log('[BRA-FieldDetector] Calling onDetectionComplete callback');
+        
+        const detectionData = {
+          state: this.options.state || 'Unknown',
+          confidence: readiness.score, // Use readiness score as overall confidence
+          readinessScore: readiness.score,
+          validationScore: validation.score,
+          avgFieldConfidence: summary.summary.avgConfidence,
+          isDetected: readiness.score > 0,
+          criticalFieldsFound: readiness.criticalFieldsFound,
+          categoryCount: readiness.categoryCount,
+          totalFields: this.fields.length,
+          classifiedFields: summary.summary.classified,
+          fields: summary.summary.classified
+        };
+        
+        // Call the callback with detection data
+        this.options.onDetectionComplete(detectionData);
+      }
+      
+      // Also try direct messaging if available (fallback)
+      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+        console.log('[BRA-FieldDetector] Attempting direct message send (fallback)');
+        
+        const panelUpdate = {
+          type: 'updateDetection',
+          isDetected: true,
+          state: this.options.state || 'DC',
+          confidence: readiness.score || validation.score,
+          fields: summary.summary.classified
+        };
+        
+        try {
+          chrome.runtime.sendMessage(panelUpdate, function(response) {
+            if (chrome.runtime.lastError) {
+              console.error('[BRA-FieldDetector] Fallback message error (expected in module context):', chrome.runtime.lastError);
+            } else {
+              console.log('[BRA-FieldDetector] Fallback message sent');
+            }
+          });
+        } catch (error) {
+          console.error('[BRA-FieldDetector] Fallback message exception (expected in module context):', error);
+        }
+      }
+      
       console.log('==================== FIELD DETECTION END ====================');
       
       return this.fields;

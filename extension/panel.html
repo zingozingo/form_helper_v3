@@ -8,41 +8,25 @@
 </head>
 <body>
   <div class="container">
+    <!-- Confidence meter at the very top -->
+    <div id="confidence-meter" class="confidence-meter">
+      <div class="confidence-bar-container">
+        <div id="confidence-bar-top" class="confidence-bar-top"></div>
+        <span id="confidence-text" class="confidence-text">Detecting...</span>
+      </div>
+    </div>
+    
     <!-- User Navigation Header -->
     <div class="user-nav-header">
       <button id="endeavors-button" class="nav-button">My Endeavors</button>
       <button id="user-button" class="nav-button user-button">USER</button>
     </div>
     
-    <header>
-      <div class="status">
-        <span id="status-indicator" title="Detection status"></span>
-      </div>
-    </header>
     
     <div id="error-container" class="error-container"></div>
     
-    <div id="no-detection" class="view">
-      <p>No business registration form detected on this page.</p>
-      <p class="auto-detection-notice">Detection runs automatically every few seconds</p>
-    </div>
-    
-    <div id="detection" class="view hidden">
-      <div class="info-card">
-        <div class="info-row">
-          <span class="label">State:</span>
-          <span id="state-value">--</span>
-        </div>
-        <div class="info-row">
-          <span class="label">Confidence:</span>
-          <div class="meter">
-            <div id="confidence-bar"></div>
-          </div>
-          <span id="confidence-value">0%</span>
-        </div>
-      </div>
-      
-      <!-- Form Assistance section removed -->
+    <div id="main-content" class="view">
+      <!-- Empty space for future field display -->
     </div>
     
     <!-- Chat Interface -->

@@ -9,13 +9,14 @@ const userButton = document.getElementById('user-button');
 const autoFillButton = document.getElementById('auto-fill-button');
 
 // DOM elements - Detection
-const statusIndicator = document.getElementById('status-indicator');
-const noDetectionView = document.getElementById('no-detection');
-const detectionView = document.getElementById('detection');
-const stateValue = document.getElementById('state-value');
-const confidenceBar = document.getElementById('confidence-bar');
-const confidenceValue = document.getElementById('confidence-value');
+// const statusIndicator = document.getElementById('status-indicator'); // Removed with blue status bar
+const mainContent = document.getElementById('main-content');
 const errorContainer = document.getElementById('error-container');
+
+// DOM elements - Top confidence meter
+const confidenceMeter = document.getElementById('confidence-meter');
+const confidenceBarTop = document.getElementById('confidence-bar-top');
+const confidenceText = document.getElementById('confidence-text');
 
 // Show error message
 function showError(message, isHtml = false) {
@@ -102,16 +103,89 @@ function hideError() {
   }
 }
 
+// Listen for detection updates from background
+chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
+  console.log('[BRA Panel] ===== MESSAGE RECEIVED =====');
+  console.log('[BRA Panel] Full message:', JSON.stringify(message));
+  console.log('[BRA Panel] Message type/action:', message.action || message.type || 'unknown');
+  
+  if (message.action === 'detectionUpdated') {
+    console.log('[BRA Panel] ===== DETECTION UPDATED =====');
+    console.log('[BRA Panel] Tab ID:', message.tabId);
+    console.log('[BRA Panel] Result:', JSON.stringify(message.result));
+    
+    // Update UI with new detection result
+    if (message.result) {
+      console.log('[BRA Panel] Calling updateUI with detection result');
+      updateUI(message.result);
+    } else {
+      console.log('[BRA Panel] No result in detectionUpdated message!');
+    }
+  }
+  
+  // Handle direct updateDetection messages from fieldDetector
+  if (message.type === 'updateDetection') {
+    console.log('[BRA Panel] Direct detection update received:', message);
+    console.log('[BRA Panel] Creating detection result with confidence:', message.confidence);
+    
+    // Create a result object that updateUI expects
+    const detectionResult = {
+      isBusinessRegistrationForm: message.isDetected,
+      confidenceScore: message.confidence,
+      state: message.state,
+      fieldDetection: {
+        isDetected: message.isDetected,
+        confidence: message.confidence,
+        state: message.state,
+        classifiedFields: message.fields
+      }
+    };
+    
+    console.log('[BRA Panel] Calling updateUI with result:', detectionResult);
+    // Update UI immediately
+    updateUI(detectionResult);
+  }
+  
+  // Always send a response to avoid errors
+  if (sendResponse) {
+    sendResponse({received: true});
+  }
+  
+  return true; // Keep message channel open for async response
+});
+
+// Global reference to auto detector
+let autoDetector = null;
+
 // Initialize when panel opens
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[BRA] Panel opened');
+  console.log('[BRA Panel] ============ PANEL OPENED ============');
+  console.log('[BRA Panel] Timestamp:', new Date().toISOString());
   
   try {
+    // Clear initial "Detecting..." after a timeout if nothing happens
+    setTimeout(function() {
+      if (confidenceText && confidenceText.textContent === 'Detecting...') {
+        console.log('[BRA Panel] Clearing stuck "Detecting..." text');
+        confidenceText.textContent = 'No form detected';
+      }
+    }, 3000); // 3 second timeout
+    
     // Get current tab
     chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+      console.log('[BRA Panel] Initial tabs query result:', tabs);
       if (tabs && tabs[0]) {
+        console.log('[BRA Panel] Initial tab ID:', tabs[0].id, 'URL:', tabs[0].url);
+        currentTabId = tabs[0].id; // Store current tab ID
+        console.log('[BRA Panel] Calling getDetectionResult for tab:', tabs[0].id);
         // Get detection for current tab
         getDetectionResult(tabs[0].id);
+      } else {
+        console.log('[BRA Panel] No tabs found on initial load');
+        // Clear "Detecting..." if no tabs
+        if (confidenceText) {
+          confidenceText.textContent = 'No form detected';
+        }
       }
     });
     
@@ -119,6 +193,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function setupAutomaticDetection() {
       // Track if detection is in progress
       let detectionInProgress = false;
+      let detectionInterval = null;
       
       // Function to check for forms
       function checkForForms() {
@@ -134,9 +209,6 @@ document.addEventListener('DOMContentLoaded', function() {
           
           const tabId = tabs[0].id;
           
-          // Set status as checking - visual indicator
-          statusIndicator.classList.add('active');
-          
           // Mark detection as in progress
           detectionInProgress = true;
           
@@ -145,11 +217,19 @@ document.addEventListener('DOMContentLoaded', function() {
             action: 'triggerDetection'
           }, function(response) {
             // Success callback
-            // Wait a moment for detection to finish
+            // Check if detection already completed
+            if (response && response.hasResult && response.result) {
+              console.log('[BRA Panel] Detection result available');
+              updateUI(response.result);
+              detectionInProgress = false;
+              return;
+            }
+            
+            // Wait for detection to finish
             setTimeout(function() {
               getDetectionResult(tabId);
               detectionInProgress = false;
-            }, 500);
+            }, 2000);
           }, function(error) {
             // Error callback after all retries
             if (error.message.includes('receiving end does not exist')) {
@@ -162,27 +242,32 @@ document.addEventListener('DOMContentLoaded', function() {
         });
       }
       
-      // Immediately check when panel loads
-      checkForForms();
+      // Don't immediately check - let the initial getDetectionResult complete first
+      // checkForForms();
       
-      // Set up periodic automatic detection
-      const detectionInterval = setInterval(checkForForms, 3000);
+      // Set up periodic automatic detection - start after initial delay
+      detectionInterval = setInterval(checkForForms, 5000);
       
       // Clean up interval when panel is closed
       window.addEventListener('unload', function() {
-        clearInterval(detectionInterval);
+        if (detectionInterval) {
+          clearInterval(detectionInterval);
+        }
       });
       
       return {
         checkNow: checkForForms,
         stopChecking: function() {
-          clearInterval(detectionInterval);
+          if (detectionInterval) {
+            clearInterval(detectionInterval);
+            detectionInterval = null;
+          }
         }
       };
     }
     
     // Initialize automatic detection
-    const autoDetector = setupAutomaticDetection();
+    autoDetector = setupAutomaticDetection();
     
     // Set up navigation buttons
     if (endeavorsButton) {
@@ -247,20 +332,26 @@ document.addEventListener('DOMContentLoaded', function() {
 // Get detection result from background script
 function getDetectionResult(tabId) {
   try {
+    console.log('[BRA Panel] Getting detection result for tab:', tabId);
     chrome.runtime.sendMessage({
       action: 'getDetectionResult',
       tabId: tabId
     }, function(response) {
       if (chrome.runtime.lastError) {
+        console.error('[BRA Panel] Error getting detection result:', chrome.runtime.lastError);
         showError('Error getting detection result: ' + chrome.runtime.lastError.message);
         return;
       }
       
+      console.log('[BRA Panel] Got response:', response);
+      
       if (response && response.success && response.result) {
+        console.log('[BRA Panel] Detection result:', response.result);
         // Show detection result
         updateUI(response.result);
         hideError();
       } else if (response && response.hasErrors && response.errors) {
+        console.log('[BRA Panel] Has errors:', response.errors);
         // Show formatted error with troubleshooting tips
         const errorHtml = formatErrorDetails(response.errors);
         if (errorHtml) {
@@ -271,9 +362,57 @@ function getDetectionResult(tabId) {
         
         // Update status to show no detection
         showNoDetection();
-      } else {
+      } else if (response && response.success === false) {
+        console.log('[BRA Panel] No detection result available yet');
+        // Clear "Detecting..." text if no result
+        if (confidenceText && confidenceText.textContent === 'Detecting...') {
+          confidenceText.textContent = 'No form detected';
+        }
         // Try asking content script directly
         askContentScript(tabId);
+        
+        // Also set up a delayed retry to catch any late-arriving results
+        setTimeout(function() {
+          console.log('[BRA Panel] Delayed retry for detection result');
+          if (!lastUpdateResult || !lastUpdateResult.isBusinessRegistrationForm) {
+            getDetectionResult(tabId);
+          }
+        }, 2000);
+      } else {
+        console.log('[BRA Panel] No result from background, asking content script');
+        // Try asking content script directly
+        askContentScript(tabId);
+        
+        // Only trigger a fresh detection if we don't already have a result
+        if (!lastUpdateResult || !lastUpdateResult.isBusinessRegistrationForm) {
+          console.log('[BRA Panel] Triggering fresh detection');
+          chrome.tabs.sendMessage(tabId, {
+            action: 'triggerDetection'
+          }, function(response) {
+            if (chrome.runtime.lastError) {
+              console.error('[BRA Panel] Error triggering detection:', chrome.runtime.lastError);
+              
+              // If content script not ready, wait and retry
+              if (chrome.runtime.lastError.message.includes('receiving end does not exist')) {
+                console.log('[BRA Panel] Content script not ready, retrying in 2s');
+                setTimeout(function() {
+                  getDetectionResult(tabId);
+                }, 2000);
+              }
+            } else if (response && response.hasResult && response.result) {
+              // Detection already completed, use existing result
+              console.log('[BRA Panel] Detection already completed, using existing result');
+              updateUI(response.result);
+            } else {
+              console.log('[BRA Panel] Detection triggered, response:', response);
+              // Wait for detection to complete and try again
+              setTimeout(function() {
+                console.log('[BRA Panel] Retrying getDetectionResult after trigger');
+                getDetectionResult(tabId);
+              }, 3000);
+            }
+          });
+        }
       }
     });
     
@@ -330,6 +469,24 @@ let autoRetryTimer = null;
 function askContentScript(tabId) {
   try {
     currentTabId = tabId;
+    console.log('[BRA Panel] Asking content script directly for tab:', tabId);
+    
+    // Ask content script directly for its current detection result
+    chrome.tabs.sendMessage(tabId, {
+      action: 'getDetectionStatus'
+    }, function(response) {
+      if (chrome.runtime.lastError) {
+        console.error('[BRA Panel] Error asking content script:', chrome.runtime.lastError);
+        return;
+      }
+      
+      console.log('[BRA Panel] Content script response:', response);
+      if (response && response.hasResult && response.result) {
+        // Use the result directly from content script
+        updateUI(response.result);
+      }
+    });
+    
     // First, try to get detection status
     sendMessageWithRetry(tabId, {
       action: 'getDetectionStatus',
@@ -354,8 +511,7 @@ function askContentScript(tabId) {
       
       // Check if detection is still in progress
       if (statusResult && statusResult.attempts > 0 && !statusResult.hasResult) {
-        // Still working - keep the status indicator active
-        statusIndicator.classList.add('active');
+        // Status indicator removed - detection progress shown in confidence meter
         
         // Wait a bit and check again if still trying
         if (statusResult.attempts < statusResult.maxAttempts) {
@@ -458,17 +614,23 @@ function setupConnectionMonitoring() {
           if (!isConnected) {
             connectionRetryCount = 0;
             isConnected = true;
-            getDetectionResult(currentTabId);
+            
+            // Only get detection result if we don't already have one
+            if (!lastUpdateResult || !lastUpdateResult.isBusinessRegistrationForm) {
+              getDetectionResult(currentTabId);
+            }
             
             // Also check if content script has new detection results
-            if (response.detectionStatus && response.detectionStatus.hasResult) {
+            if (response.detectionStatus && response.detectionStatus.hasResult && 
+                (!lastUpdateResult || !lastUpdateResult.isBusinessRegistrationForm)) {
               // Trigger an immediate refresh of the data
               setTimeout(() => getDetectionResult(currentTabId), 100);
             }
           }
           
-          // Check if detection has changed in content script since we last checked
-          if (response.detectionStatus && response.detectionStatus.hasResult) {
+          // Only check for updates if we don't already have a detected form
+          if (response.detectionStatus && response.detectionStatus.hasResult && 
+              (!lastUpdateResult || !lastUpdateResult.isBusinessRegistrationForm)) {
             // Get the detection result if it's been more than 5 seconds since last check
             const timeSinceLastCheck = Date.now() - lastActiveTimestamp;
             if (timeSinceLastCheck > 5000) {
@@ -499,36 +661,225 @@ function setupConnectionMonitoring() {
 // Initialize enhanced connection monitoring
 setupConnectionMonitoring();
 
+// Track last update to prevent flickering
+let lastUpdateTime = 0;
+let lastUpdateResult = null;
+
+// Store current detection result for debugging
+let currentDetectionResult = null;
+
 // Update UI with detection result
 function updateUI(result) {
-  if (!result || !result.isBusinessRegistrationForm) {
-    showNoDetection();
+  console.log('[BRA Panel] updateUI called with:', result);
+  
+  // Store the current detection result for debugging
+  currentDetectionResult = result;
+  
+  // Throttle updates to prevent flickering (min 500ms between updates)
+  const now = Date.now();
+  if (lastUpdateResult && (now - lastUpdateTime) < 500) {
+    // If we have a recent update and the new one has lower confidence, skip it
+    if (result.confidenceScore < lastUpdateResult.confidenceScore) {
+      console.log('[BRA Panel] Skipping update with lower confidence to prevent flickering');
+      return;
+    }
+  }
+  
+  lastUpdateTime = now;
+  lastUpdateResult = result;
+  
+  // Only update the top confidence meter - no duplicate displays
+  updateConfidenceMeter(result);
+  
+  // Status indicator removed - confidence meter shows detection status
+}
+
+// Track last confidence values to prevent unnecessary updates
+let lastConfidenceValue = null;
+let lastStateValue = null;
+
+// Update the confidence meter at the top of the panel
+function updateConfidenceMeter(result) {
+  console.log('[BRA Panel] updateConfidenceMeter called with:', result);
+  
+  if (!confidenceBarTop || !confidenceText) {
+    console.error('[BRA Panel] Confidence meter elements not found!');
     return;
   }
   
-  // Show detection view
-  noDetectionView.classList.add('hidden');
-  detectionView.classList.remove('hidden');
+  if (!result || !result.isBusinessRegistrationForm) {
+    // Only update if it's actually changed
+    if (lastConfidenceValue !== null || lastStateValue !== null) {
+      console.log('[BRA Panel] No business form detected, showing "No form detected"');
+      // Show as not detected
+      confidenceBarTop.style.width = '0%';
+      confidenceBarTop.className = 'confidence-bar-top';
+      confidenceText.textContent = 'No form detected';
+      lastConfidenceValue = null;
+      lastStateValue = null;
+    }
+    return;
+  }
   
-  // Update status indicator
-  statusIndicator.classList.add('active');
+  // Use main confidence score, not field detection readiness score
+  let confidence = result.confidenceScore || 0;
+  const state = result.state || '';
   
-  // Update state
-  stateValue.textContent = result.state ? getStateName(result.state) : 'Unknown';
+  // Check if values have actually changed
+  if (confidence === lastConfidenceValue && state === lastStateValue) {
+    console.log('[BRA Panel] Confidence values unchanged, skipping update');
+    return;
+  }
   
-  // Update confidence
-  const confidence = result.confidenceScore;
-  confidenceBar.style.width = Math.min(confidence, 100) + '%';
-  confidenceValue.textContent = confidence + '%';
+  // Log what confidence we're using
+  console.log('[BRA Panel] Updating confidence from', lastConfidenceValue, 'to', confidence);
+  
+  lastConfidenceValue = confidence;
+  lastStateValue = state;
+  
+  const stateName = state ? getStateName(state) : '';
+  
+  // Update bar width with transition
+  confidenceBarTop.style.transition = 'width 0.3s ease-out';
+  confidenceBarTop.style.width = Math.min(confidence, 100) + '%';
+  
+  // Update bar color based on confidence level
+  confidenceBarTop.className = 'confidence-bar-top';
+  if (confidence >= 70) {
+    confidenceBarTop.classList.add('high');
+  } else if (confidence >= 40) {
+    confidenceBarTop.classList.add('medium');
+  } else {
+    confidenceBarTop.classList.add('low');
+  }
+  
+  // Update text with bullet separator
+  if (state) {
+    confidenceText.textContent = `${state} • ${confidence}%`;
+    console.log('[BRA Panel] Set confidence text to:', `${state} • ${confidence}%`);
+  } else {
+    confidenceText.textContent = `${confidence}%`;
+    console.log('[BRA Panel] Set confidence text to:', `${confidence}%`);
+  }
+  
+  console.log('[BRA Panel] Confidence meter updated successfully');
 }
 
 // Show no detection view
 function showNoDetection() {
-  statusIndicator.classList.remove('active');
-  
-  noDetectionView.classList.remove('hidden');
-  detectionView.classList.add('hidden');
+  // Status indicator removed - only update confidence meter
+  updateConfidenceMeter(null);
 }
+
+// Expose functions globally for debugging
+window.updateUI = updateUI;
+window.updateConfidenceMeter = updateConfidenceMeter;
+
+// Debug helper for testing
+window.testDetection = function(confidence = 60, state = 'DC') {
+  console.log('Testing detection update with:', { confidence, state });
+  const testResult = {
+    isBusinessRegistrationForm: true,
+    confidenceScore: confidence,
+    state: state,
+    fieldDetection: {
+      isDetected: true,
+      confidence: confidence,
+      state: state
+    }
+  };
+  updateUI(testResult);
+};
+
+// Debug DOM elements
+window.checkElements = function() {
+  console.log('Checking DOM elements:');
+  console.log('- confidenceBarTop:', confidenceBarTop);
+  console.log('- confidenceText:', confidenceText);
+  // console.log('- statusIndicator:', statusIndicator); // Removed
+  console.log('- mainContent:', mainContent);
+  
+  if (confidenceBarTop) {
+    console.log('  - confidenceBarTop.style.width:', confidenceBarTop.style.width);
+    console.log('  - confidenceBarTop.className:', confidenceBarTop.className);
+  }
+  if (confidenceText) {
+    console.log('  - confidenceText.textContent:', confidenceText.textContent);
+  }
+};
+
+// Debug helper to manually trigger detection flow
+window.debugDetection = function() {
+  console.log('[BRA Panel] ===== DEBUG DETECTION FLOW =====');
+  
+  if (!currentTabId) {
+    console.error('No current tab ID!');
+    return;
+  }
+  
+  console.log('1. Requesting detection result from background...');
+  chrome.runtime.sendMessage({
+    action: 'getDetectionResult',
+    tabId: currentTabId
+  }, function(response) {
+    console.log('2. Background response:', response);
+    
+    if (!response || !response.result) {
+      console.log('3. No result from background, asking content script...');
+      chrome.tabs.sendMessage(currentTabId, {
+        action: 'getDetectionStatus'
+      }, function(statusResponse) {
+        console.log('4. Content script status:', statusResponse);
+        
+        if (statusResponse && statusResponse.hasResult) {
+          console.log('5. Content script has result, requesting it...');
+          chrome.tabs.sendMessage(currentTabId, {
+            action: 'getDetectionResult'
+          }, function(resultResponse) {
+            console.log('6. Content script result:', resultResponse);
+            if (resultResponse) {
+              updateUI(resultResponse);
+            }
+          });
+        }
+      });
+    } else {
+      console.log('3. Got result from background, updating UI...');
+      updateUI(response.result);
+    }
+  });
+};
+
+// Helper to get current detection from background
+window.getCurrentDetection = function() {
+  if (!currentTabId) {
+    console.error('No current tab ID');
+    return;
+  }
+  
+  chrome.runtime.sendMessage({
+    action: 'getDetectionResult',
+    tabId: currentTabId
+  }, function(response) {
+    console.log('Background detection result:', response);
+    if (response && response.result) {
+      console.log('Updating UI with result...');
+      updateUI(response.result);
+    } else {
+      console.log('No detection result available');
+    }
+  });
+};
+
+console.log('Debug helpers available:');
+console.log('- updateUI(result) - Update UI with detection result');
+console.log('- updateConfidenceMeter(result) - Update just the confidence meter');
+console.log('- testDetection(confidence, state) - Test with sample data');
+console.log('- checkElements() - Check DOM element states');
+console.log('- debugDetection() - Debug the detection message flow');
+console.log('- getCurrentDetection() - Get and display current detection from background');
+console.log('- currentDetectionResult - View the last detection result');
+console.log('- Example: testDetection(79, "DC")');
 
 // Get full state name
 function getStateName(code) {

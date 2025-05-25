@@ -297,10 +297,14 @@ function sendMessageWithRetry(message, successCallback, errorCallback, retryCoun
  * Initialize detection with multiple loading strategies
  */
 function initializeDetection() {
+  console.log('[BRA Content] ========== INITIALIZING DETECTION ==========');
+  console.log('[BRA Content] URL:', window.location.href);
+  console.log('[BRA Content] Document state:', document.readyState);
   log('Initializing content script with improved loading strategy');
   
   // Wait a bit to ensure the module is loaded
   setTimeout(() => {
+    console.log('[BRA Content] Starting initial detection attempt');
     // Strategy 1: Try at document_end (set in manifest)
     tryDetection();
     
@@ -745,6 +749,13 @@ async function detectBusinessForm() {
         if (dcMatches >= 2) {
           confidenceDetails.stateIdentification = 15; // Max points for strong DC match
           log('[BRA] Strong DC indicators found:', dcMatches);
+          
+          // Additional bonus for DC business registration specific URLs
+          if (currentUrl.includes('mybusiness.dc.gov') || currentUrl.includes('dlcp.dc.gov')) {
+            confidenceDetails.domain += 5; // Extra domain bonus for known DC business sites
+            confidenceDetails.businessTerminology += 5; // Implicit business context
+            log('[BRA] DC business registration site detected, adding bonus points');
+          }
         }
       }
     }
@@ -752,25 +763,6 @@ async function detectBusinessForm() {
     // Field classification scoring (10-20 points)
     // This will be updated after field detection
     confidenceDetails.fieldClassification = 0;
-    
-    // Update field classification score based on detection results
-    if (classificationStats && classificationStats.classified > 0) {
-      const classificationRate = classificationStats.classified / classificationStats.total;
-      const avgConfidence = classificationStats.avgConfidence || 0;
-      
-      // Base score on classification rate (0-10 points)
-      confidenceDetails.fieldClassification = Math.round(classificationRate * 10);
-      
-      // Bonus for high confidence classifications (0-10 points)
-      if (avgConfidence >= 80) {
-        confidenceDetails.fieldClassification += 10;
-      } else if (avgConfidence >= 70) {
-        confidenceDetails.fieldClassification += 5;
-      }
-      
-      // Cap at 20 points
-      confidenceDetails.fieldClassification = Math.min(confidenceDetails.fieldClassification, 20);
-    }
     
     // Business terminology (10-15 points)
     const businessTermCount = (document.body.textContent.match(/business|entity|corporation|llc|formation|registration|ein|tax.*id/gi) || []).length;
@@ -790,8 +782,16 @@ async function detectBusinessForm() {
     
     log(`Confidence: ${breakdown} = ${confidenceScore}%`);
     
-    // Check if it's a business form - either meets score threshold or has strong prior confirmation
-    let isBusinessForm = confidenceScore >= 60 || adaptiveConfidence;
+    // Business form detection based on current confidence
+    // This will be refined after field detection if available
+    let isBusinessForm = confidenceScore >= 40 || adaptiveConfidence;
+    
+    console.log('[BRA Content] Initial business form detection:', {
+      confidenceScore: confidenceScore,
+      threshold: 40,
+      adaptiveConfidence: adaptiveConfidence,
+      isBusinessForm: isBusinessForm
+    });
     
     // State already detected above, no need to redeclare
     
@@ -912,23 +912,86 @@ async function detectBusinessForm() {
     
     // Update field classification score based on detected fields
     if (fieldDetectionResults && classificationStats) {
-      const classifiedRatio = classificationStats.classifiedFields / Math.max(classificationStats.totalFields, 1);
-      confidenceDetails.fieldClassification = Math.round(classifiedRatio * 20); // Up to 20 points
+      const classifiedRatio = classificationStats.classified / Math.max(classificationStats.total, 1);
+      const avgConfidence = classificationStats.avgConfidence || 0;
+      
+      // Base score on classification rate (0-10 points)
+      confidenceDetails.fieldClassification = Math.round(classifiedRatio * 10);
+      
+      // Bonus for high confidence classifications (0-10 points)
+      if (avgConfidence >= 80) {
+        confidenceDetails.fieldClassification += 10;
+      } else if (avgConfidence >= 70) {
+        confidenceDetails.fieldClassification += 5;
+      }
+      
+      // Additional bonus for business-specific fields detected
+      const businessCategories = ['business_name', 'entity_type', 'ein', 'tax_id', 'business_address', 'dba'];
+      const detectedBusinessCategories = Object.keys(classificationStats.byCategory || {})
+        .filter(cat => businessCategories.includes(cat));
+      
+      if (detectedBusinessCategories.length >= 3) {
+        confidenceDetails.fieldClassification += 5; // Strong business form indicator
+      } else if (detectedBusinessCategories.length >= 2) {
+        confidenceDetails.fieldClassification += 3;
+      }
+      
+      // Cap at 25 points (increased to reflect importance of field detection)
+      confidenceDetails.fieldClassification = Math.min(confidenceDetails.fieldClassification, 25);
       
       // Recalculate total score with field classification
       const updatedTotalScore = Object.values(confidenceDetails).reduce((sum, score) => sum + score, 0);
-      const updatedConfidenceScore = Math.min(updatedTotalScore, 100);
+      confidenceScore = Math.min(updatedTotalScore, 100);
       
       // Log updated confidence
       log(`Field classification added ${confidenceDetails.fieldClassification} points`);
-      log(`Updated confidence: ${updatedConfidenceScore}%`);
+      log(`Updated confidence: ${confidenceScore}%`);
       
-      // Update values
-      confidenceScore = updatedConfidenceScore;
-      isBusinessForm = confidenceScore >= 60 || adaptiveConfidence;
+      // Business form detection logic with multiple criteria
+      // Lower threshold if we have strong field detection results
+      const hasStrongFieldDetection = classifiedRatio >= 0.5 && avgConfidence >= 70;
+      const hasBusinessFields = detectedBusinessCategories.length >= 2;
+      const hasGoodUrlScore = urlScore >= 60;
+      const hasFormElements = formScore >= 30;
+      
+      // Business form detection rules:
+      // 1. High confidence score (>= 50%)
+      // 2. OR strong field detection with business fields
+      // 3. OR good URL score with form elements and some business fields
+      // 4. OR adaptive confidence from user feedback
+      // 5. OR already detected as business form (don't downgrade)
+      // 6. OR detected state with classified fields (strong signal)
+      isBusinessForm = isBusinessForm || (
+        confidenceScore >= 50 || 
+        (hasStrongFieldDetection && hasBusinessFields) ||
+        (hasGoodUrlScore && hasFormElements && detectedBusinessCategories.length >= 1) ||
+        (state && classificationStats.classified >= 5) || // State + 5+ classified fields
+        adaptiveConfidence
+      );
+      
+      // Log the detailed decision
+      console.log('[BRA Content] Business form detection decision:', {
+        confidenceScore: confidenceScore,
+        threshold: 50,
+        hasStrongFieldDetection: hasStrongFieldDetection,
+        hasBusinessFields: hasBusinessFields,
+        businessFieldsCount: detectedBusinessCategories.length,
+        businessFieldsDetected: detectedBusinessCategories,
+        hasGoodUrlScore: hasGoodUrlScore,
+        hasFormElements: hasFormElements,
+        adaptiveConfidence: adaptiveConfidence,
+        isBusinessForm: isBusinessForm
+      });
     } else {
-      // No field detection results, log for debugging
-      log('Field detection results not available, skipping field classification scoring');
+      // No field detection results - use basic threshold
+      isBusinessForm = confidenceScore >= 40 || adaptiveConfidence;
+      
+      console.log('[BRA Content] Business form detection decision (no field data):', {
+        confidenceScore: confidenceScore,
+        threshold: 40,
+        adaptiveConfidence: adaptiveConfidence,
+        isBusinessForm: isBusinessForm
+      });
     }
     
     // Log comprehensive field detection summary if available
@@ -954,6 +1017,9 @@ async function detectBusinessForm() {
         console.table(sampleMapping);
       }
     }
+    
+    // Store detection result globally
+    console.log('[BRA Content] Storing detection result globally');
     
     // Create detection result with enhanced information
     detectionResult = {
@@ -987,13 +1053,41 @@ async function detectBusinessForm() {
     
     log('Detection result:', detectionResult);
     
+    // Log the detection result before sending
+    console.log('[BRA Content] Sending detection result to background:', {
+      isBusinessForm: detectionResult.isBusinessRegistrationForm,
+      confidence: detectionResult.confidenceScore,
+      state: detectionResult.state
+    });
+    
     // Send to background script with error handling
     chrome.runtime.sendMessage({
       action: 'formDetected',
       result: detectionResult
     }, function(response) {
       if (chrome.runtime.lastError) {
+        console.error('[BRA Content] Failed to send to background:', chrome.runtime.lastError);
         reportError(new Error(chrome.runtime.lastError.message), 'sendingDetectionResult', true);
+      } else {
+        console.log('[BRA Content] Successfully sent to background, response:', response);
+      }
+    });
+    
+    // Also send updateDetection message with the actual calculated confidence score
+    console.log('[BRA Content] Sending updateDetection with actual confidence score:', confidenceScore);
+    chrome.runtime.sendMessage({
+      type: 'updateDetection',
+      isDetected: isBusinessForm,
+      state: state || 'DC',
+      confidence: confidenceScore,  // Use the actual calculated confidence score
+      readinessScore: fieldDetectionResults?.readinessScore,
+      validationScore: fieldDetectionResults?.validationScore,
+      fields: classificationStats?.classified || 0
+    }, function(response) {
+      if (chrome.runtime.lastError) {
+        console.error('[BRA Content] Error sending updateDetection with actual confidence:', chrome.runtime.lastError);
+      } else {
+        console.log('[BRA Content] updateDetection sent with actual confidence score');
       }
     });
   } catch (error) {
@@ -1244,7 +1338,26 @@ async function analyzeFormElements() {
         // Create a field detector instance with state context
         const detector = new FieldDetector.default(document, { 
           state: state,
-          debug: DEBUG_MODE // Enable debug mode if DEBUG_MODE is true
+          debug: DEBUG_MODE, // Enable debug mode if DEBUG_MODE is true
+          // Add message handler to pass messages through content script
+          onDetectionComplete: function(detectionData) {
+            console.log('[BRA Content] Field detection complete, sending updateDetection message:', detectionData);
+            
+            // Update fieldDetectionResults with detector data
+            if (fieldDetectionResults) {
+              fieldDetectionResults.readinessScore = detectionData.readinessScore;
+              fieldDetectionResults.validationScore = detectionData.validationScore;
+            }
+            
+            // Use the actual confidence score from the main detection result if available
+            const actualConfidence = detectionResult && detectionResult.confidenceScore ? 
+              detectionResult.confidenceScore : 
+              (detectionData.confidence || detectionData.readinessScore || 60);
+            
+            // Don't send updateDetection from here - wait for the main detection to complete
+            // This callback runs too early, before isBusinessForm is calculated
+            console.log('[BRA Content] Field detection complete, will send update after main detection');
+          }
         });
         
         // Detect all form fields with comprehensive logging
@@ -1260,8 +1373,12 @@ async function analyzeFormElements() {
         
         log('Field classification results:', classificationStats);
         
-        // Store results for further analysis
+        // Store the field detection results for later use
         fieldDetectionResults = {
+          isDetected: true,
+          confidence: classificationStats.avgConfidence,
+          readinessScore: null,  // Will be set by detector callback
+          validationScore: null,  // Will be set by detector callback
           fields: fields,
           stats: classificationStats,
           uiData: uiData
@@ -1649,6 +1766,7 @@ function updateDetectionHistory(feedbackData) {
 
 // Listen for messages from popup, panel, or background script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log('[BRA Content] Message received:', message.action, 'Detection result exists:', !!detectionResult);
   log('Message received:', message.action);
   
   try {
@@ -1666,14 +1784,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     }
     else if (message.action === 'triggerDetection') {
-      // Reset detection state
-      detectionResult = null;
+      // Don't trigger if we already have a valid detection result
+      if (detectionResult && detectionResult.isBusinessRegistrationForm !== undefined) {
+        console.log('[BRA Content] Detection already completed, returning existing result');
+        sendResponse({ 
+          success: true, 
+          message: 'Detection already completed',
+          hasResult: true,
+          result: detectionResult
+        });
+        return;
+      }
+      
+      // Only reset if we don't have a result yet
       detectionAttempts = 0;
       fallbackDetectionMode = false; // Reset fallback mode to try normal detection
       connectionEstablished = false; // Reset connection state
       connectionAttempts = 0; // Reset connection attempts
       
-      // Run detection again
+      // Run detection
       tryDetection();
       sendResponse({ 
         success: true, 
@@ -1682,9 +1811,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     }
     else if (message.action === 'getDetectionStatus') {
-      // Return current detection status
+      console.log('[BRA Content] getDetectionStatus - returning result:', {
+        hasResult: !!detectionResult,
+        isBusinessForm: detectionResult?.isBusinessRegistrationForm,
+        confidence: detectionResult?.confidenceScore,
+        state: detectionResult?.state
+      });
+      
+      // Return current detection status with result
       sendResponse({
         hasResult: !!detectionResult,
+        result: detectionResult, // Include the actual result
         attempts: detectionAttempts,
         maxAttempts: MAX_DETECTION_ATTEMPTS,
         documentReady: document.readyState,
@@ -1984,6 +2121,22 @@ function performHealthCheck() {
   console.log('[BRA Health Check]', health);
   return health;
 }
+
+// Debug helper - expose to window for console debugging
+window.BRA_DEBUG = {
+  getDetectionResult: () => detectionResult,
+  getHealth: () => performHealthCheck(),
+  triggerDetection: () => tryDetection(),
+  getState: () => ({
+    detectionResult,
+    detectionAttempts,
+    connectionEstablished,
+    fallbackDetectionMode,
+    errors: window.BRA_Errors
+  })
+};
+
+console.log('[BRA Content] Debug helper available: window.BRA_DEBUG');
 
 // Expose health check for debugging
 window.BRA_HealthCheck = performHealthCheck;
