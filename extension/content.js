@@ -4,7 +4,7 @@
  */
 
 // Configuration
-let DEBUG_MODE = false; // Set to true for verbose logging
+const DEBUG_MODE = true; // Set to true for verbose logging
 
 // Import modules with proper error handling
 let URLDetector = null;
@@ -14,12 +14,12 @@ let FieldDetector = null;
 (async function loadModules() {
   try {
     // Load URL detector module
-    let urlDetectorURL = chrome.runtime.getURL('modules/urlDetector.js');
+    const urlDetectorURL = chrome.runtime.getURL('modules/urlDetector.js');
     URLDetector = await import(urlDetectorURL);
     console.log('[BRA] URLDetector module loaded successfully');
     
     // Load field detector module
-    let fieldDetectorURL = chrome.runtime.getURL('modules/fieldDetector.js');
+    const fieldDetectorURL = chrome.runtime.getURL('modules/fieldDetector.js');
     FieldDetector = await import(fieldDetectorURL);
     console.log('[BRA] FieldDetector module loaded successfully');
   } catch (error) {
@@ -40,8 +40,8 @@ function createFallbackURLDetector() {
     default: {
       analyzeUrl: function(url) {
         // Simple implementation that checks for government domains and business keywords
-        let isGov = url.includes('.gov') || url.includes('.state.');
-        let isBusinessRelated = url.includes('business') || 
+        const isGov = url.includes('.gov') || url.includes('.state.');
+        const isBusinessRelated = url.includes('business') || 
                                 url.includes('register') ||
                                 url.includes('filing');
         return {
@@ -51,12 +51,12 @@ function createFallbackURLDetector() {
       },
       identifyStateFromUrl: function(url) {
         // Simple implementation to extract state from URL
-        let states = {
+        const states = {
           'california': 'CA', 'delaware': 'DE', 'nevada': 'NV', 'florida': 'FL',
           'texas': 'TX', 'newyork': 'NY', 'wyoming': 'WY'
         };
         
-        for (let [name, code] of Object.entries(states)) {
+        for (const [name, code] of Object.entries(states)) {
           if (url.toLowerCase().includes(name)) {
             return code;
           }
@@ -82,7 +82,7 @@ function createFallbackFieldDetector() {
           this.fields = [];
           
           // Simple implementation to detect form fields
-          let inputs = this.root.querySelectorAll('input, select, textarea');
+          const inputs = this.root.querySelectorAll('input, select, textarea');
           inputs.forEach((element, index) => {
             // Extract basic info for each field
             this.fields.push({
@@ -108,13 +108,13 @@ function createFallbackFieldDetector() {
       
       classifyFields() {
         // Simple implementation that checks for business-related keywords
-        let businessKeywords = ['business', 'company', 'name', 'entity', 'type'];
+        const businessKeywords = ['business', 'company', 'name', 'entity', 'type'];
         
         this.fields.forEach(field => {
-          let fieldText = (field.name + ' ' + field.id).toLowerCase();
+          const fieldText = (field.name + ' ' + field.id).toLowerCase();
           
           // Check if field contains business keywords
-          let matches = businessKeywords.filter(keyword => fieldText.includes(keyword));
+          const matches = businessKeywords.filter(keyword => fieldText.includes(keyword));
           
           if (matches.length > 0) {
             field.classification = {
@@ -136,10 +136,10 @@ function createFallbackFieldDetector() {
 // Global variables
 let detectionResult = null;
 let detectionAttempts = 0;
-let MAX_DETECTION_ATTEMPTS = 5; // Increased from 3 to allow more retries
-let RETRY_DELAY = 2000; // ms
-let CONNECTION_RETRY_MAX = 3; // Maximum messaging connection retries
-let CONNECTION_RETRY_DELAY = 1000; // ms
+const MAX_DETECTION_ATTEMPTS = 5; // Increased from 3 to allow more retries
+const RETRY_DELAY = 2000; // ms
+const CONNECTION_RETRY_MAX = 3; // Maximum messaging connection retries
+const CONNECTION_RETRY_DELAY = 1000; // ms
 let pendingMessageCallbacks = {}; // Track pending message callbacks
 let connectionEstablished = false; // Track if we've successfully connected to background
 let fallbackDetectionMode = false; // Flag to indicate if we're using fallback detection
@@ -149,7 +149,7 @@ let connectionAttempts = 0; // Track connection attempts
 function log(message, data) {
   if (!DEBUG_MODE) return; // Skip logging in production
   
-  let prefix = '[BRA]';
+  const prefix = '[BRA]';
   if (data) {
     console.log(prefix, message, data);
   } else {
@@ -164,12 +164,6 @@ function log(message, data) {
  * @param {boolean} isFatal - Whether the error is fatal and should be shown to the user
  */
 function reportError(errorParam, context, isFatal = false) {
-  console.error('[DEBUG] Error bypassed:', errorParam, context);
-  console.error('[DEBUG] Error stack:', errorParam.stack);
-  return; // Skip all error handling to see the real error
-  
-  // TEMPORARILY COMMENTED OUT TO DEBUG
-  /*
   console.error('[BRA] Error in ' + context + ':', errorParam);
   
   // Ensure error is an Error object
@@ -181,7 +175,7 @@ function reportError(errorParam, context, isFatal = false) {
   }
   
   // Create error object once to reuse
-  let errorData = {
+  const errorData = {
     action: 'detectionError',
     error: {
       message: errorObj.message || 'Unknown error',
@@ -214,7 +208,6 @@ function reportError(errorParam, context, isFatal = false) {
       log('Switching to fallback detection mode');
     }
   });
-  */
 }
 
 /**
@@ -227,7 +220,7 @@ function reportError(errorParam, context, isFatal = false) {
 function sendMessageWithRetry(message, successCallback, errorCallback, retryCount = 0) {
   try {
     // Generate unique ID for this message to track it
-    let messageId = Date.now() + Math.random().toString(36).substr(2, 5);
+    const messageId = Date.now() + Math.random().toString(36).substr(2, 5);
     message.messageId = messageId;
     
     // Store the callbacks
@@ -241,7 +234,7 @@ function sendMessageWithRetry(message, successCallback, errorCallback, retryCoun
     chrome.runtime.sendMessage(message, function(response) {
       // Check for error
       if (chrome.runtime.lastError) {
-        let error = chrome.runtime.lastError;
+        const error = chrome.runtime.lastError;
         
         // If we have retries left, try again
         if (retryCount < CONNECTION_RETRY_MAX) {
@@ -265,7 +258,7 @@ function sendMessageWithRetry(message, successCallback, errorCallback, retryCoun
           
           // Report connection error unless this is already a report error call
           if (message.action !== 'detectionError') {
-            let connectionError = new Error('Failed to establish connection: ' + error.message);
+            const connectionError = new Error('Failed to establish connection: ' + error.message);
             reportError(connectionError, 'messageSend', true);
           }
         }
@@ -338,10 +331,10 @@ function initializeDetection() {
 function setupMutationObserver() {
   try {
     // Observe DOM changes for dynamic content loading
-    let observer = new MutationObserver((mutations) => {
+    const observer = new MutationObserver((mutations) => {
       try {
         // Look for significant DOM changes that might indicate form loading
-        let significantChanges = mutations.some(mutation => {
+        const significantChanges = mutations.some(mutation => {
           try {
             if (!mutation.addedNodes || mutation.addedNodes.length === 0) return false;
             
@@ -447,12 +440,8 @@ async function tryDetection() {
       });
     }
   } catch (error) {
-    console.error('[DEBUG] Raw error in tryDetection:', error);
-    console.error('[DEBUG] Error message:', error.message);
-    console.error('[DEBUG] Error stack:', error.stack);
-    
     // Determine if this is a fatal error
-    let isFatal = detectionAttempts >= MAX_DETECTION_ATTEMPTS;
+    const isFatal = detectionAttempts >= MAX_DETECTION_ATTEMPTS;
     
     // Report the error with proper context
     reportError(error, 'tryDetection', isFatal);
@@ -460,7 +449,7 @@ async function tryDetection() {
     // Retry if we haven't exceeded max attempts
     if (detectionAttempts < MAX_DETECTION_ATTEMPTS) {
       // Increase delay for each retry with exponential backoff
-      let currentDelay = RETRY_DELAY * Math.pow(1.5, detectionAttempts - 1);
+      const currentDelay = RETRY_DELAY * Math.pow(1.5, detectionAttempts - 1);
       log('Will retry detection in ' + currentDelay + 'ms');
       setTimeout(tryDetection, currentDelay);
     } else {
@@ -509,7 +498,7 @@ function showFallbackIndicator(message) {
     }
     
     // Create a floating indicator
-    let indicator = document.createElement('div');
+    const indicator = document.createElement('div');
     indicator.id = 'bra-fallback-indicator';
     indicator.style.cssText = `
       position: fixed;
@@ -566,10 +555,8 @@ async function detectBusinessForm() {
   log('Starting form detection');
   
   try {
-    debugger; // This will pause execution in Chrome DevTools
-    console.log('[DEBUG] detectBusinessForm started - all consts replaced with let');
     // Get current URL
-    let currentUrl = window.location.href;
+    const currentUrl = window.location.href;
     
     // Make sure URLDetector is loaded
     if (!URLDetector) {
@@ -584,15 +571,15 @@ async function detectBusinessForm() {
     if (!URLDetector.default || !URLDetector.default.analyzeUrl) {
       throw new Error('URLDetector.default.analyzeUrl is not available');
     }
-    let urlAnalysis = await URLDetector.default.analyzeUrl(currentUrl);
-    let urlScore = urlAnalysis.score;
+    const urlAnalysis = await URLDetector.default.analyzeUrl(currentUrl);
+    const urlScore = urlAnalysis.score;
     
     // Continue with other analyses
-    let contentScore = analyzePageContent();
-    let formAnalysis = await analyzeFormElements();
-    let formScore = formAnalysis.score;
-    let fieldDetectionResults = formAnalysis.fieldDetectionResults;
-    let classificationStats = formAnalysis.classificationStats;
+    const contentScore = analyzePageContent();
+    const formAnalysis = await analyzeFormElements();
+    const formScore = formAnalysis.score;
+    const fieldDetectionResults = formAnalysis.fieldDetectionResults;
+    const classificationStats = formAnalysis.classificationStats;
     
     // Add dynamic loading adjustment - check if page is still loading resources
     let dynamicLoadingScore = 0;
@@ -601,17 +588,17 @@ async function detectBusinessForm() {
     let loadingIndicators = [];
     try {
       // First try with explicit class names (more reliable)
-      let explicitLoadingElements = document.querySelectorAll(
+      const explicitLoadingElements = document.querySelectorAll(
         '.loading, .spinner, .loader, .progress, [role="progressbar"], .wait, .processing'
       );
       
       // Then look for elements with common loading-related classes
       // Safe approach that avoids wildcards
-      let allElements = document.querySelectorAll('*');
-      let wildcardMatches = Array.from(allElements).filter(el => {
+      const allElements = document.querySelectorAll('*');
+      const wildcardMatches = Array.from(allElements).filter(el => {
         if (!el.className || typeof el.className !== 'string') return false;
         
-        let classNames = el.className.toLowerCase();
+        const classNames = el.className.toLowerCase();
         return classNames.includes('loading') || 
                classNames.includes('spinner') ||
                classNames.includes('progress') || 
@@ -629,8 +616,8 @@ async function detectBusinessForm() {
     
     // If loading indicators are visible, add to dynamic loading score
     if (loadingIndicators.length > 0) {
-      let visibleLoadingIndicators = Array.from(loadingIndicators).filter(el => {
-        let style = window.getComputedStyle(el);
+      const visibleLoadingIndicators = Array.from(loadingIndicators).filter(el => {
+        const style = window.getComputedStyle(el);
         return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
       });
       
@@ -641,24 +628,24 @@ async function detectBusinessForm() {
     }
     
     // Check for new script loading or AJAX activity
-    let newScriptLoading = document.querySelectorAll('script[async], script[defer]').length > 0;
+    const newScriptLoading = document.querySelectorAll('script[async], script[defer]').length > 0;
     if (newScriptLoading) {
       dynamicLoadingScore += 5;
       log('Detected async/defer scripts, adding to dynamic loading score');
     }
     
     // Adjust form score if we suspect dynamic loading is still in progress
-    let adjustedFormScore = formScore + dynamicLoadingScore;
+    const adjustedFormScore = formScore + dynamicLoadingScore;
     
     // Calculate user feedback data - track prior detections for learning
-    let priorDetections = window.localStorage.getItem('BRA_PriorDetections');
+    const priorDetections = window.localStorage.getItem('BRA_PriorDetections');
     let adaptiveScore = 0;
     let adaptiveConfidence = false;
     
     // Helper function to extract URL pattern for similarity matching
     function extractUrlPattern(url) {
       try {
-        let urlObj = new URL(url);
+        const urlObj = new URL(url);
         // Extract domain and first path segment
         return urlObj.hostname + urlObj.pathname.split('/').slice(0, 2).join('/');
       } catch (e) {
@@ -668,17 +655,17 @@ async function detectBusinessForm() {
     
     if (priorDetections) {
       try {
-        let detections = JSON.parse(priorDetections);
-        let urlPattern = extractUrlPattern(currentUrl);
+        const detections = JSON.parse(priorDetections);
+        const urlPattern = extractUrlPattern(currentUrl);
         
         // Check if we have prior detections for this URL pattern
-        let matchingDetections = detections.filter(d => 
+        const matchingDetections = detections.filter(d => 
           d.urlPattern === urlPattern || currentUrl.includes(d.urlRoot)
         );
         
         if (matchingDetections.length > 0) {
           // Calculate average success rate for this URL pattern
-          let successRate = matchingDetections.reduce(
+          const successRate = matchingDetections.reduce(
             (sum, d) => sum + (d.userConfirmed ? 1 : 0), 0
           ) / matchingDetections.length;
           
@@ -699,7 +686,7 @@ async function detectBusinessForm() {
     }
     
     // Enhanced confidence scoring with breakdown
-    let confidenceDetails = {
+    const confidenceDetails = {
       domain: 0,
       urlPattern: 0,
       formFields: 0,
@@ -745,7 +732,7 @@ async function detectBusinessForm() {
       // DC-specific bonus
       if (state === 'DC') {
         // Check for DC-specific indicators
-        let dcIndicators = [
+        const dcIndicators = [
           currentUrl.includes('mybusiness.dc.gov'),
           currentUrl.includes('dlcp.dc.gov'),
           currentUrl.includes('dcra.dc.gov'),
@@ -754,7 +741,7 @@ async function detectBusinessForm() {
           document.body.textContent.includes('Clean Hands')
         ];
         
-        let dcMatches = dcIndicators.filter(Boolean).length;
+        const dcMatches = dcIndicators.filter(Boolean).length;
         if (dcMatches >= 2) {
           confidenceDetails.stateIdentification = 15; // Max points for strong DC match
           log('[BRA] Strong DC indicators found:', dcMatches);
@@ -766,18 +753,37 @@ async function detectBusinessForm() {
     // This will be updated after field detection
     confidenceDetails.fieldClassification = 0;
     
+    // Update field classification score based on detection results
+    if (classificationStats && classificationStats.classified > 0) {
+      const classificationRate = classificationStats.classified / classificationStats.total;
+      const avgConfidence = classificationStats.avgConfidence || 0;
+      
+      // Base score on classification rate (0-10 points)
+      confidenceDetails.fieldClassification = Math.round(classificationRate * 10);
+      
+      // Bonus for high confidence classifications (0-10 points)
+      if (avgConfidence >= 80) {
+        confidenceDetails.fieldClassification += 10;
+      } else if (avgConfidence >= 70) {
+        confidenceDetails.fieldClassification += 5;
+      }
+      
+      // Cap at 20 points
+      confidenceDetails.fieldClassification = Math.min(confidenceDetails.fieldClassification, 20);
+    }
+    
     // Business terminology (10-15 points)
-    let businessTermCount = (document.body.textContent.match(/business|entity|corporation|llc|formation|registration|ein|tax.*id/gi) || []).length;
+    const businessTermCount = (document.body.textContent.match(/business|entity|corporation|llc|formation|registration|ein|tax.*id/gi) || []).length;
     if (businessTermCount > 0) {
       confidenceDetails.businessTerminology = Math.min(10 + Math.floor(businessTermCount / 5), 15);
     }
     
     // Calculate total with new scoring
-    let totalScore = Object.values(confidenceDetails).reduce((sum, score) => sum + score, 0);
+    const totalScore = Object.values(confidenceDetails).reduce((sum, score) => sum + score, 0);
     let confidenceScore = Math.min(totalScore, 100);
     
     // Log confidence breakdown
-    let breakdown = Object.entries(confidenceDetails)
+    const breakdown = Object.entries(confidenceDetails)
       .filter(([_, score]) => score > 0)
       .map(([category, score]) => `${category}(${score})`)
       .join(' + ');
@@ -796,30 +802,30 @@ async function detectBusinessForm() {
     // Try to determine more specific form type based on content and URL
     if (isBusinessForm) {
       // Analyze for formation vs. compliance forms
-      let formationTerms = ['formation', 'organize', 'start', 'create', 'new', 'articles of'];
-      let complianceTerms = ['annual', 'biennial', 'report', 'renewal', 'compliance', 'update'];
-      let taxRegistrationTerms = ['tax', 'ein', 'employer id', 'sales tax', 'revenue'];
-      let foreignQualificationTerms = ['foreign', 'qualification', 'out-of-state', 'another state'];
+      const formationTerms = ['formation', 'organize', 'start', 'create', 'new', 'articles of'];
+      const complianceTerms = ['annual', 'biennial', 'report', 'renewal', 'compliance', 'update'];
+      const taxRegistrationTerms = ['tax', 'ein', 'employer id', 'sales tax', 'revenue'];
+      const foreignQualificationTerms = ['foreign', 'qualification', 'out-of-state', 'another state'];
       
-      let pageText = document.body.textContent.toLowerCase();
+      const pageText = document.body.textContent.toLowerCase();
       
       // Check for formation/creation forms
-      let isFormation = formationTerms.some(term => 
+      const isFormation = formationTerms.some(term => 
         pageText.includes(term) || currentUrl.includes(term)
       );
       
       // Check for compliance/reporting forms
-      let isCompliance = complianceTerms.some(term => 
+      const isCompliance = complianceTerms.some(term => 
         pageText.includes(term) || currentUrl.includes(term)
       );
       
       // Check for tax registration forms
-      let isTaxRegistration = taxRegistrationTerms.some(term => 
+      const isTaxRegistration = taxRegistrationTerms.some(term => 
         pageText.includes(term) || currentUrl.includes(term)
       );
       
       // Check for foreign qualification forms
-      let isForeignQualification = foreignQualificationTerms.some(term => 
+      const isForeignQualification = foreignQualificationTerms.some(term => 
         pageText.includes(term) || currentUrl.includes(term)
       );
       
@@ -852,7 +858,7 @@ async function detectBusinessForm() {
         formType = 'entity_formation';
         
         // Determine entity type being formed
-        let entityTypeTerms = [
+        const entityTypeTerms = [
           {term: 'llc', type: 'llc'},
           {term: 'limited liability company', type: 'llc'},
           {term: 'corporation', type: 'corporation'},
@@ -863,7 +869,7 @@ async function detectBusinessForm() {
           {term: 'sole proprietor', type: 'sole_proprietorship'}
         ];
         
-        for (let {term, type} of entityTypeTerms) {
+        for (const {term, type} of entityTypeTerms) {
           if (pageText.includes(term)) {
             specificFormDetails.entityType = type;
             break;
@@ -873,18 +879,18 @@ async function detectBusinessForm() {
     }
     
     // Check for form steps or multi-page flow  
-    let isMultiStep = document.querySelectorAll('.step, .wizard-step, .form-step, [role="progressbar"]').length > 0;
-    let hasProgress = document.querySelectorAll('.progress, .progress-bar, [role="progressbar"]').length > 0;
+    const isMultiStep = document.querySelectorAll('.step, .wizard-step, .form-step, [role="progressbar"]').length > 0;
+    const hasProgress = document.querySelectorAll('.progress, .progress-bar, [role="progressbar"]').length > 0;
     
     // Fixed selector to find next buttons with standard DOM methods
     let nextButtons = false;
     try {
       // First get standard button elements that might be next/continue buttons
-      let buttonElements = document.querySelectorAll('button, input[type="button"], a.button, .btn, .btn-next, .next-button');
+      const buttonElements = document.querySelectorAll('button, input[type="button"], a.button, .btn, .btn-next, .next-button');
       
       // Then filter by examining their text content
       nextButtons = Array.from(buttonElements).some(button => {
-        let buttonText = (button.textContent || button.value || '').toLowerCase();
+        const buttonText = (button.textContent || button.value || '').toLowerCase();
         return buttonText.includes('next') || buttonText.includes('continue') || 
                buttonText.includes('proceed') || buttonText.includes('forward');
       });
@@ -894,24 +900,24 @@ async function detectBusinessForm() {
       nextButtons = document.querySelectorAll('.btn-next, .next-button').length > 0;
     }
     
-    let formStructure = {
+    const formStructure = {
       isMultiStep: isMultiStep || nextButtons,
       hasProgress: hasProgress,
       estimatedSteps: isMultiStep ? document.querySelectorAll('.step, .wizard-step, .form-step').length : 1
     };
     
     // Store URL pattern for learning
-    let urlPattern = extractUrlPattern(currentUrl);
-    let urlRoot = new URL(currentUrl).origin;
+    const urlPattern = extractUrlPattern(currentUrl);
+    const urlRoot = new URL(currentUrl).origin;
     
     // Update field classification score based on detected fields
     if (fieldDetectionResults && classificationStats) {
-      let classifiedRatio = classificationStats.classifiedFields / Math.max(classificationStats.totalFields, 1);
+      const classifiedRatio = classificationStats.classifiedFields / Math.max(classificationStats.totalFields, 1);
       confidenceDetails.fieldClassification = Math.round(classifiedRatio * 20); // Up to 20 points
       
       // Recalculate total score with field classification
-      let updatedTotalScore = Object.values(confidenceDetails).reduce((sum, score) => sum + score, 0);
-      let updatedConfidenceScore = Math.min(updatedTotalScore, 100);
+      const updatedTotalScore = Object.values(confidenceDetails).reduce((sum, score) => sum + score, 0);
+      const updatedConfidenceScore = Math.min(updatedTotalScore, 100);
       
       // Log updated confidence
       log(`Field classification added ${confidenceDetails.fieldClassification} points`);
@@ -923,6 +929,30 @@ async function detectBusinessForm() {
     } else {
       // No field detection results, log for debugging
       log('Field detection results not available, skipping field classification scoring');
+    }
+    
+    // Log comprehensive field detection summary if available
+    if (fieldDetectionResults && fieldDetectionResults.uiData && DEBUG_MODE) {
+      console.log('%c[BRA] UI-Ready Field Data Structure:', 'color: green; font-weight: bold');
+      console.log('Categories:', fieldDetectionResults.uiData.categories);
+      console.log('Total fields:', fieldDetectionResults.uiData.totalFields);
+      console.log('Classified fields:', fieldDetectionResults.uiData.classifiedFields);
+      
+      // Log sample auto-fill mapping
+      if (fieldDetectionResults.fields.length > 0) {
+        console.log('%c[BRA] Sample Auto-Fill Mapping:', 'color: purple; font-weight: bold');
+        const sampleMapping = {};
+        fieldDetectionResults.fields.slice(0, 5).forEach(field => {
+          if (field.classification) {
+            sampleMapping[field.classification.category] = {
+              element: field.element,
+              label: field.label?.text || field.name,
+              confidence: field.classification.confidence
+            };
+          }
+        });
+        console.table(sampleMapping);
+      }
     }
     
     // Create detection result with enhanced information
@@ -967,9 +997,6 @@ async function detectBusinessForm() {
       }
     });
   } catch (error) {
-    console.error('[DEBUG] Raw error in detectBusinessForm:', error);
-    console.error('[DEBUG] Error message:', error.message);
-    console.error('[DEBUG] Error stack:', error.stack);
     reportError(error, 'detectBusinessForm', detectionAttempts >= MAX_DETECTION_ATTEMPTS);
     throw error; // Re-throw to trigger retry mechanism
   }
@@ -989,10 +1016,10 @@ function analyzePageContent() {
     }
     
     // Get page text
-    let pageText = document.body.textContent.toLowerCase();
+    const pageText = document.body.textContent.toLowerCase();
     
     // Entity type terms - organized by category for better maintainability
-    let entityTypes = {
+    const entityTypes = {
       llc: [
         'llc', 'limited liability company', 'limited liability corporation',
         'l.l.c.', 'professional llc', 'pllc', 'series llc', 
@@ -1025,17 +1052,17 @@ function analyzePageContent() {
     };
     
     // Flatten entity types into a single array
-    let entityTerms = [].concat(...Object.values(entityTypes).map(terms => terms));
+    const entityTerms = [].concat(...Object.values(entityTypes).map(terms => terms));
     
     // Check for entity type terms - more points for exact matches
     entityTerms.forEach(term => {
       // More points for whole word matches
-      let regex = new RegExp(`\\b${term}\\b`, 'i');
+      const regex = new RegExp(`\\b${term}\\b`, 'i');
       if (regex.test(pageText)) {
         score += 5;
         // Extra points for key entity types in title or heading elements
-        let inTitle = document.title.toLowerCase().match(regex);
-        let inHeadings = Array.from(document.querySelectorAll('h1, h2, h3'))
+        const inTitle = document.title.toLowerCase().match(regex);
+        const inHeadings = Array.from(document.querySelectorAll('h1, h2, h3'))
           .some(h => h.textContent.toLowerCase().match(regex));
         
         if (inTitle) score += 2;
@@ -1047,7 +1074,7 @@ function analyzePageContent() {
     });
     
     // Registration and formation terms
-    let registrationTerms = [
+    const registrationTerms = [
       // Basic registration terms
       'business registration', 'register a business', 'register your business',
       'business license', 'business permit', 'business filing',
@@ -1085,12 +1112,12 @@ function analyzePageContent() {
         score += 7;
         
         // Check for registration term + entity type nearby (proximity check)
-        for (let entityType in entityTypes) {
-          for (let entityTerm of entityTypes[entityType]) {
+        for (const entityType in entityTypes) {
+          for (const entityTerm of entityTypes[entityType]) {
             // Phrases like "register an LLC" or "form a corporation" get extra points
-            let phrase1 = term + ' ' + entityTerm;
-            let phrase2 = term + ' a ' + entityTerm;
-            let phrase3 = term + ' an ' + entityTerm;
+            const phrase1 = term + ' ' + entityTerm;
+            const phrase2 = term + ' a ' + entityTerm;
+            const phrase3 = term + ' an ' + entityTerm;
             
             if (pageText.includes(phrase1) || 
                 pageText.includes(phrase2) || 
@@ -1104,7 +1131,7 @@ function analyzePageContent() {
     });
     
     // Check for government terms indicating official registration
-    let governmentTerms = [
+    const governmentTerms = [
       'secretary of state', 'department of state', 'division of corporations',
       'business registrations division', 'corporations division',
       'department of revenue', 'revenue department', 'tax department',
@@ -1119,12 +1146,12 @@ function analyzePageContent() {
     });
     
     // Check for common registration-related heading text
-    let headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
+    const headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
     headings.forEach(heading => {
-      let headingText = heading.textContent.toLowerCase();
+      const headingText = heading.textContent.toLowerCase();
       
       // Registration-related headings
-      let registrationHeadingPatterns = [
+      const registrationHeadingPatterns = [
         // Registration + entity patterns
         { pattern: /register.{0,10}(business|entity|llc|corporation|company)/i, points: 15 },
         { pattern: /form.{0,5}(an?|your).{0,5}(llc|corporation|business|company)/i, points: 15 },
@@ -1148,7 +1175,7 @@ function analyzePageContent() {
       ];
       
       // Check heading text against patterns
-      for (let { pattern, points } of registrationHeadingPatterns) {
+      for (const { pattern, points } of registrationHeadingPatterns) {
         if (pattern.test(headingText)) {
           score += points;
           break; // Don't double count matches from the same heading
@@ -1157,24 +1184,24 @@ function analyzePageContent() {
     });
     
     // Title analysis
-    let titleText = document.title.toLowerCase();
-    let titlePatterns = [
+    const titleText = document.title.toLowerCase();
+    const titlePatterns = [
       { pattern: /(register|form|create|start).{0,10}(business|llc|corporation)/i, points: 20 },
       { pattern: /(business|entity|llc).{0,10}registration/i, points: 20 },
       { pattern: /(file|submit).{0,10}(application|registration)/i, points: 15 },
       { pattern: /(articles|certificate).{0,10}(organization|incorporation|formation)/i, points: 15 }
     ];
     
-    for (let { pattern, points } of titlePatterns) {
+    for (const { pattern, points } of titlePatterns) {
       if (pattern.test(titleText)) {
         score += points;
       }
     }
     
     // Meta tag analysis for "business registration" keywords
-    let metaDescription = document.querySelector('meta[name="description"]');
+    const metaDescription = document.querySelector('meta[name="description"]');
     if (metaDescription) {
-      let metaText = metaDescription.getAttribute('content').toLowerCase();
+      const metaText = metaDescription.getAttribute('content').toLowerCase();
       if (/business|registration|entity|incorporation|llc|corporation/.test(metaText)) {
         score += 10;
       }
@@ -1211,44 +1238,41 @@ async function analyzeFormElements() {
         log('Using FieldDetector module to analyze form fields');
         
         // Get state from URL if available
-        let currentUrl = window.location.href;
-        let state = URLDetector?.default?.identifyStateFromUrl(currentUrl) || null;
+        const currentUrl = window.location.href;
+        const state = URLDetector?.default?.identifyStateFromUrl(currentUrl) || null;
         
         // Create a field detector instance with state context
-        let detector = new FieldDetector.default(document, { state: state });
+        const detector = new FieldDetector.default(document, { 
+          state: state,
+          debug: DEBUG_MODE // Enable debug mode if DEBUG_MODE is true
+        });
         
-        // Detect all form fields
-        let fields = await detector.detectFields();
+        // Detect all form fields with comprehensive logging
+        console.log('%c[BRA] Starting comprehensive field detection...', 'color: blue; font-weight: bold');
+        const fields = await detector.detectFields();
         log(`FieldDetector found ${fields.length} form fields`);
         
-        // Classification is now done during field detection
-        classificationStats = {
-          totalFields: fields.length,
-          classifiedFields: fields.filter(f => f.classification).length,
-          categories: {}
-        };
+        // Get UI-ready data structure
+        const uiData = detector.getUIData();
         
-        // Count categories
-        fields.forEach(field => {
-          if (field.classification && field.classification.category) {
-            let category = field.classification.category;
-            classificationStats.categories[category] = (classificationStats.categories[category] || 0) + 1;
-          }
-        });
+        // Use the detailed classification summary from detector
+        classificationStats = uiData.summary;
         
         log('Field classification results:', classificationStats);
         
         // Store results for further analysis
         fieldDetectionResults = {
           fields: fields,
-          stats: classificationStats
+          stats: classificationStats,
+          uiData: uiData
         };
         
         // Store diagnostic info
         diagnosticInfo.fieldDetector = {
           fieldsDetected: fields.length,
-          classifiedFields: classificationStats.classifiedFields,
-          categories: classificationStats.categories
+          classifiedFields: classificationStats.classified,
+          categories: classificationStats.byCategory,
+          avgConfidence: classificationStats.avgConfidence
         };
         
         // Add score based on field detection
@@ -1257,16 +1281,16 @@ async function analyzeFormElements() {
           score += Math.min(fields.length * 2, 20);
           
           // More points if we could classify fields
-          if (classificationStats.classifiedFields > 0) {
+          if (classificationStats.classified > 0) {
             // Additional points based on percentage of fields classified
-            let classificationRate = classificationStats.classifiedFields / fields.length;
+            const classificationRate = classificationStats.classified / fields.length;
             score += Math.round(classificationRate * 20);
             
             // Additional points for business-related field categories
-            let businessCategories = ['businessName', 'entityType', 'businessId', 'taxId', 'businessAddress'];
+            const businessCategories = ['business_name', 'entity_type', 'ein', 'tax_id', 'business_address'];
             let businessCategoryCount = 0;
             
-            for (let category in classificationStats.categories) {
+            for (const category in classificationStats.byCategory) {
               if (businessCategories.includes(category)) {
                 businessCategoryCount++;
                 // Bonus points for critical business categories
@@ -1277,6 +1301,11 @@ async function analyzeFormElements() {
             // Very strong signal if multiple business categories are present
             if (businessCategoryCount >= 3) {
               score += 20;
+            }
+            
+            // Bonus for high average confidence
+            if (classificationStats.avgConfidence >= 80) {
+              score += 10;
             }
           }
         }
@@ -1289,15 +1318,15 @@ async function analyzeFormElements() {
     
     // Traditional form analysis as backup or supplement
     // Look for forms and interactive elements
-    let forms = document.querySelectorAll('form');
-    let formCount = forms.length;
+    const forms = document.querySelectorAll('form');
+    const formCount = forms.length;
     
     // Store diagnostic information
     diagnosticInfo.formCount = formCount;
     
     // Multi-step form detection - look for indicators of a step-based form
-    let stepIndicators = document.querySelectorAll('.step, .wizard-step, .form-step, [role="progressbar"]');
-    let hasStepIndicators = stepIndicators.length > 0;
+    const stepIndicators = document.querySelectorAll('.step, .wizard-step, .form-step, [role="progressbar"]');
+    const hasStepIndicators = stepIndicators.length > 0;
     
     // Check for multi-page forms with next/previous buttons
     let nextButtons = [];
@@ -1308,7 +1337,7 @@ async function analyzeFormElements() {
       nextButtons = Array.from(document.querySelectorAll('button, input[type="button"], a.button, .btn, [class*="next"], [class*="continue"]'))
         .filter(el => {
           try {
-            let text = (el.textContent || el.value || '').toLowerCase();
+            const text = (el.textContent || el.value || '').toLowerCase();
             return text.includes('next') || text.includes('continue') || 
                   text.includes('proceed') || text.includes('forward');
           } catch (error) {
@@ -1319,7 +1348,7 @@ async function analyzeFormElements() {
       prevButtons = Array.from(document.querySelectorAll('button, input[type="button"], a.button, .btn, [class*="prev"], [class*="back"]'))
         .filter(el => {
           try {
-            let text = (el.textContent || el.value || '').toLowerCase();
+            const text = (el.textContent || el.value || '').toLowerCase();
             return text.includes('previous') || text.includes('back') || 
                   text.includes('return') || text.includes('prior');
           } catch (error) {
@@ -1333,7 +1362,7 @@ async function analyzeFormElements() {
       prevButtons = Array.from(document.querySelectorAll('.btn-prev, .prev-button, .back, [class*="prev"], [class*="back"]'));
     }
     
-    let hasNextPrevButtons = nextButtons.length > 0 && prevButtons.length > 0;
+    const hasNextPrevButtons = nextButtons.length > 0 && prevButtons.length > 0;
     
     // Store form structure info
     diagnosticInfo.hasStepIndicators = hasStepIndicators;
@@ -1351,8 +1380,8 @@ async function analyzeFormElements() {
       if (formCount > 1) score += 5;
     } else {
       // Even without a <form> tag, look for sufficient input fields
-      let allInputs = document.querySelectorAll('input, select, textarea');
-      let inputCount = allInputs.length;
+      const allInputs = document.querySelectorAll('input, select, textarea');
+      const inputCount = allInputs.length;
       
       // Business registration usually requires multiple fields
       if (inputCount >= 5) score += 15;
@@ -1363,17 +1392,17 @@ async function analyzeFormElements() {
     }
     
     // Form submission context analysis - look at buttons and their text
-    let submitButtons = Array.from(document.querySelectorAll('button[type="submit"], input[type="submit"], button:not([type]), .btn-primary, .submit-button'));
-    let submitButtonText = submitButtons.map(button => button.textContent.toLowerCase() || button.value?.toLowerCase() || '').join(' ');
+    const submitButtons = Array.from(document.querySelectorAll('button[type="submit"], input[type="submit"], button:not([type]), .btn-primary, .submit-button'));
+    const submitButtonText = submitButtons.map(button => button.textContent.toLowerCase() || button.value?.toLowerCase() || '').join(' ');
     
     // Strong business registration indicators in submit buttons
-    let registrationSubmitTerms = [
+    const registrationSubmitTerms = [
       'register', 'file', 'submit', 'form', 'create', 'incorporate',
       'establish', 'start business', 'complete registration', 'continue registration',
       'file now', 'file articles', 'save filing', 'submit application'
     ];
     
-    for (let term of registrationSubmitTerms) {
+    for (const term of registrationSubmitTerms) {
       if (submitButtonText.includes(term)) {
         score += 10;
         break; // Only count this category once
@@ -1381,7 +1410,7 @@ async function analyzeFormElements() {
     }
     
     // Check for payment-related form elements (common in registration)
-    let paymentFields = document.querySelectorAll(
+    const paymentFields = document.querySelectorAll(
       'input[name*="card"], input[name*="credit"], input[name*="payment"], ' +
       'input[name*="ccnumber"], input[name*="cc-number"], input[name*="cvc"], ' +
       'input[name*="cvv"], input[name*="expir"], input[name*="fee"]'
@@ -1392,27 +1421,27 @@ async function analyzeFormElements() {
     }
     
     // Check for file uploads (common for supporting documents)
-    let fileUploads = document.querySelectorAll('input[type="file"]');
+    const fileUploads = document.querySelectorAll('input[type="file"]');
     if (fileUploads.length > 0) {
       score += 5;
       
       // File upload with specific label text is even stronger signal
-      let fileLabels = Array.from(fileUploads).map(file => {
+      const fileLabels = Array.from(fileUploads).map(file => {
         if (file.labels && file.labels[0]) return file.labels[0].textContent.toLowerCase();
         if (file.id) {
-          let label = document.querySelector(`label[for="${file.id}"]`);
+          const label = document.querySelector(`label[for="${file.id}"]`);
           return label ? label.textContent.toLowerCase() : '';
         }
         return '';
       }).join(' ');
       
-      let documentTerms = [
+      const documentTerms = [
         'articles', 'certificate', 'operating agreement', 'bylaws',
         'proof', 'identification', 'documentation', 'verification',
         'business document', 'supporting document'
       ];
       
-      for (let term of documentTerms) {
+      for (const term of documentTerms) {
         if (fileLabels.includes(term)) {
           score += 10;
           break;
@@ -1424,13 +1453,13 @@ async function analyzeFormElements() {
     let captchaElements = [];
     try {
       // Use standard selectors for known captcha elements
-      let explicitCaptchaElements = document.querySelectorAll(
+      const explicitCaptchaElements = document.querySelectorAll(
         '.captcha, .g-recaptcha, iframe[src*="recaptcha"]'
       );
       
       // For wildcard searches, use a safer approach
-      let allElements = document.querySelectorAll('*');
-      let wildcardMatches = Array.from(allElements).filter(el => {
+      const allElements = document.querySelectorAll('*');
+      const wildcardMatches = Array.from(allElements).filter(el => {
         try {
           // Check className
           if (el.className && typeof el.className === 'string' && 
@@ -1491,11 +1520,11 @@ async function analyzeFormElements() {
 function identifyStateFromContent() {
   try {
     // Get page text
-    let pageText = document.body ? document.body.textContent.toLowerCase() : '';
+    const pageText = document.body ? document.body.textContent.toLowerCase() : '';
     if (!pageText) return null;
     
     // Map of state names and their codes
-    let states = {
+    const states = {
       'alabama': 'AL', 'alaska': 'AK', 'arizona': 'AZ', 'arkansas': 'AR',
       'california': 'CA', 'colorado': 'CO', 'connecticut': 'CT', 'delaware': 'DE',
       'florida': 'FL', 'georgia': 'GA', 'hawaii': 'HI', 'idaho': 'ID',
@@ -1512,10 +1541,10 @@ function identifyStateFromContent() {
     };
     
     // Look for state name mentions in headings first (more likely to be relevant)
-    let headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
-    for (let heading of headings) {
-      let headingText = heading.textContent.toLowerCase();
-      for (let [stateName, stateCode] of Object.entries(states)) {
+    const headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
+    for (const heading of headings) {
+      const headingText = heading.textContent.toLowerCase();
+      for (const [stateName, stateCode] of Object.entries(states)) {
         if (headingText.includes(stateName) || 
             (stateCode.length === 2 && headingText.includes(` ${stateCode.toLowerCase()} `))) {
           return stateCode;
@@ -1524,11 +1553,11 @@ function identifyStateFromContent() {
     }
     
     // Check for state mentions in the context of business registration
-    let businessPhrases = ['business registration', 'register a business', 'secretary of state', 'department of state'];
+    const businessPhrases = ['business registration', 'register a business', 'secretary of state', 'department of state'];
     
-    for (let [stateName, stateCode] of Object.entries(states)) {
+    for (const [stateName, stateCode] of Object.entries(states)) {
       // Look for state name in combination with business registration phrases
-      for (let phrase of businessPhrases) {
+      for (const phrase of businessPhrases) {
         if (pageText.includes(`${stateName} ${phrase}`) || 
             pageText.includes(`${phrase} ${stateName}`)) {
           return stateCode;
@@ -1585,12 +1614,12 @@ setInterval(checkConnectionStatus, 30000);
 function updateDetectionHistory(feedbackData) {
   try {
     // Get existing detection history
-    let existingData = window.localStorage.getItem('BRA_PriorDetections') || '[]';
-    let detections = JSON.parse(existingData);
+    const existingData = window.localStorage.getItem('BRA_PriorDetections') || '[]';
+    const detections = JSON.parse(existingData);
     
     // Create new detection record with user feedback
     if (detectionResult) {
-      let newDetection = {
+      const newDetection = {
         urlPattern: detectionResult.urlPattern,
         urlRoot: detectionResult.urlRoot,
         state: detectionResult.state,
@@ -1696,9 +1725,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // Special detection for dynamic forms that might load after initial detection
         
         // Setup a more intensive MutationObserver specifically for form detection
-        let dynamicFormObserver = new MutationObserver((mutations) => {
+        const dynamicFormObserver = new MutationObserver((mutations) => {
           try {
-            let significantChanges = mutations.some(mutation => {
+            const significantChanges = mutations.some(mutation => {
               try {
                 if (!mutation.addedNodes || mutation.addedNodes.length === 0) return false;
                 
@@ -1790,35 +1819,79 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     }
     else if (message.action === 'autoFillFields') {
-      // Auto-fill form fields with sample data
+      // Auto-fill form fields with provided data or sample data
       try {
         let filledCount = 0;
-        let sampleData = {
+        
+        // Use provided data or fall back to sample data
+        const fillData = message.data || {
           // Business information
-          'business.*name|company.*name|entity.*name': 'Sample Business LLC',
-          'dba|trade.*name|doing.*business': 'Sample Trade Name',
+          business_name: 'Sample Business LLC',
+          dba: 'Sample Trade Name',
+          entity_type: 'Limited Liability Company',
           // Contact information
-          'first.*name': 'John',
-          'last.*name': 'Doe',
-          'email|e-mail': 'john.doe@example.com',
-          'phone|telephone': '555-123-4567',
+          first_name: 'John',
+          last_name: 'Doe',
+          email: 'john.doe@example.com',
+          phone: '555-123-4567',
           // Address
-          'street|address.*1|address(?!.*2)': '123 Main Street',
-          'city': 'Washington',
-          'state': 'DC',
-          'zip|postal': '20001',
+          address: '123 Main Street',
+          city: 'Washington',
+          state: 'DC',
+          zip: '20001',
           // Tax IDs
-          'ein|employer.*id|federal.*tax': '12-3456789',
-          'ssn|social.*security': '123-45-6789'
+          ein: '12-3456789',
+          ssn: '123-45-6789'
         };
         
+        console.log('[BRA] Attempting to auto-fill with data:', fillData);
+        
+        // If we have field detection results, use them for precise filling
+        if (fieldDetectionResults && fieldDetectionResults.fields) {
+          console.log('[BRA] Using field detection results for auto-fill');
+          
+          fieldDetectionResults.fields.forEach(field => {
+            if (field.classification && fillData[field.classification.category]) {
+              const value = fillData[field.classification.category];
+              if (field.element && !field.element.value && !field.element.disabled) {
+                field.element.value = value;
+                field.element.dispatchEvent(new Event('input', { bubbles: true }));
+                field.element.dispatchEvent(new Event('change', { bubbles: true }));
+                filledCount++;
+                console.log(`[BRA] Filled ${field.classification.category}: ${value}`);
+              }
+            }
+          });
+        } else {
+          // Fallback to pattern matching
+          console.log('[BRA] Using pattern matching for auto-fill');
+          
+          const sampleData = {
+            // Business information
+            'business.*name|company.*name|entity.*name': fillData.business_name || 'Sample Business LLC',
+            'dba|trade.*name|doing.*business': fillData.dba || 'Sample Trade Name',
+            // Contact information
+            'first.*name': fillData.first_name || 'John',
+            'last.*name': fillData.last_name || 'Doe',
+            'email|e-mail': fillData.email || 'john.doe@example.com',
+            'phone|telephone': fillData.phone || '555-123-4567',
+            // Address
+            'street|address.*1|address(?!.*2)': fillData.address || '123 Main Street',
+            'city': fillData.city || 'Washington',
+            'state': fillData.state || 'DC',
+            'zip|postal': fillData.zip || '20001',
+            // Tax IDs
+            'ein|employer.*id|federal.*tax': fillData.ein || '12-3456789',
+            'ssn|social.*security': fillData.ssn || '123-45-6789'
+          };
+        
         // Find all input fields
-        let inputs = document.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"], input:not([type]), textarea');
+        const inputs = document.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"], input:not([type]), textarea');
         
         inputs.forEach(input => {
           if (input.value || input.disabled || input.readOnly) return;
           
-          let fieldIdentifier = [
+          const fieldIdentifier = [
             input.name,
             input.id,
             input.placeholder,
@@ -1827,8 +1900,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           ].filter(Boolean).join(' ').toLowerCase();
           
           // Try to match against sample data patterns
-          for (let [pattern, value] of Object.entries(sampleData)) {
-            let regex = new RegExp(pattern, 'i');
+          for (const [pattern, value] of Object.entries(sampleData)) {
+            const regex = new RegExp(pattern, 'i');
             if (regex.test(fieldIdentifier)) {
               input.value = value;
               input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -1840,11 +1913,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
         
         // Handle select elements for state
-        let stateSelects = document.querySelectorAll('select');
+        const stateSelects = document.querySelectorAll('select');
         stateSelects.forEach(select => {
-          let fieldIdentifier = [select.name, select.id].filter(Boolean).join(' ').toLowerCase();
+          const fieldIdentifier = [select.name, select.id].filter(Boolean).join(' ').toLowerCase();
           if (fieldIdentifier.includes('state')) {
-            let dcOption = Array.from(select.options).find(opt => 
+            const dcOption = Array.from(select.options).find(opt => 
               opt.value === 'DC' || opt.textContent.includes('District of Columbia')
             );
             if (dcOption) {
@@ -1854,6 +1927,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             }
           }
         });
+        } // Close the else block
         
         sendResponse({
           success: true,
@@ -1890,7 +1964,7 @@ console.log('[BRA] Business Registration Assistant initialized on:', window.loca
 
 // Health check system
 function performHealthCheck() {
-  let health = {
+  const health = {
     timestamp: new Date().toISOString(),
     url: window.location.href,
     modules: {

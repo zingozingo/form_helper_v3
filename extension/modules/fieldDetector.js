@@ -264,9 +264,13 @@ class FieldDetector {
    */
   async detectFields() {
     try {
-      console.log('[BRA-FieldDetector] Starting field detection');
+      const startTime = performance.now();
+      console.log('%c[BRA-FieldDetector] Starting field detection', 'color: blue; font-weight: bold');
+      console.log('==================== FIELD DETECTION START ====================');
+      
       this.fields = [];
       this.fieldSummary = {};
+      this.classificationSummary = this._initClassificationSummary();
       
       // Ensure patterns are loaded
       await this._loadFieldPatterns();
@@ -289,18 +293,48 @@ class FieldDetector {
             field.index = index;
             
             // Classify the field
+            const classificationStart = performance.now();
             field.classification = this._classifyField(field);
+            field.classificationTime = performance.now() - classificationStart;
             
             // Add field to collection
             this.fields.push(field);
             
             // Update field summary
             this._updateFieldSummary(field);
+            
+            // Update classification summary
+            this._updateClassificationSummary(field);
+            
+            // Log detailed info for first 5 fields
+            if (index < 5) {
+              this._logFieldDetails(field, index);
+            }
           }
         } catch (fieldError) {
           console.error('[BRA-FieldDetector] Error processing field:', fieldError);
         }
       });
+      
+      // Calculate performance metrics
+      const endTime = performance.now();
+      const totalTime = endTime - startTime;
+      
+      // Generate comprehensive summary
+      const summary = this._generateComprehensiveSummary(totalTime);
+      
+      // Log the summary
+      this._logComprehensiveSummary(summary);
+      
+      // Perform validation checks
+      const validation = this._performValidationChecks();
+      this._logValidationResults(validation);
+      
+      // Determine readiness
+      const readiness = this._checkReadiness(summary, validation);
+      this._logReadinessCheck(readiness);
+      
+      console.log('==================== FIELD DETECTION END ====================');
       
       return this.fields;
     } catch (error) {
@@ -556,6 +590,494 @@ class FieldDetector {
   async updateState(stateCode) {
     this.options.state = stateCode;
     await this._loadFieldPatterns();
+  }
+  
+  /**
+   * Initialize classification summary structure
+   * @private
+   */
+  _initClassificationSummary() {
+    return {
+      total: 0,
+      classified: 0,
+      unclassified: 0,
+      avgConfidence: 0,
+      byCategory: {},
+      byType: {},
+      lowConfidence: [],
+      unclassified: [],
+      duplicates: {},
+      suspicious: [],
+      criticalFields: {
+        business_name: null,
+        ein: null,
+        entity_type: null
+      }
+    };
+  }
+  
+  /**
+   * Update classification summary with field data
+   * @private
+   */
+  _updateClassificationSummary(field) {
+    this.classificationSummary.total++;
+    
+    // Track by type
+    if (!this.classificationSummary.byType[field.type]) {
+      this.classificationSummary.byType[field.type] = [];
+    }
+    this.classificationSummary.byType[field.type].push(field);
+    
+    if (field.classification) {
+      this.classificationSummary.classified++;
+      
+      // Track by category
+      const category = field.classification.category;
+      if (!this.classificationSummary.byCategory[category]) {
+        this.classificationSummary.byCategory[category] = [];
+      }
+      this.classificationSummary.byCategory[category].push(field);
+      
+      // Track low confidence
+      if (field.classification.confidence < 70) {
+        this.classificationSummary.lowConfidence.push(field);
+      }
+      
+      // Track critical fields
+      if (category === 'business_name' || category === 'ein' || category === 'entity_type') {
+        this.classificationSummary.criticalFields[category] = field;
+      }
+      
+      // Check for duplicates
+      if (this.classificationSummary.byCategory[category].length > 1) {
+        if (!this.classificationSummary.duplicates[category]) {
+          this.classificationSummary.duplicates[category] = [];
+        }
+        this.classificationSummary.duplicates[category] = this.classificationSummary.byCategory[category];
+      }
+    } else {
+      this.classificationSummary.unclassified.push(field);
+    }
+    
+    // Check for suspicious fields
+    if (field.type === 'password' || 
+        (field.name && field.name.toLowerCase().includes('password')) ||
+        (field.id && field.id.toLowerCase().includes('password'))) {
+      this.classificationSummary.suspicious.push({
+        field: field,
+        reason: 'Password field on business form'
+      });
+    }
+  }
+  
+  /**
+   * Log detailed field information
+   * @private
+   */
+  _logFieldDetails(field, index) {
+    console.group(`%c[Field ${index + 1}] Detailed Analysis`, 'color: purple; font-weight: bold');
+    
+    console.log('Basic Info:', {
+      type: field.type,
+      name: field.name,
+      id: field.id,
+      required: field.required
+    });
+    
+    console.log('Label:', {
+      original: field.label?.text || 'No label',
+      cleaned: field.label?.text?.toLowerCase().trim() || 'N/A'
+    });
+    
+    console.log('HTML Attributes:', {
+      placeholder: field.placeholder || 'None',
+      autocomplete: field.autocomplete || 'None',
+      additionalAttrs: field.attributes
+    });
+    
+    if (field.classification) {
+      console.log('%cClassification Result:', 'color: green', {
+        category: field.classification.category,
+        confidence: `${field.classification.confidence}%`,
+        details: field.classification.details
+      });
+      console.log('Classification Time:', `${field.classificationTime.toFixed(2)}ms`);
+    } else {
+      console.log('%cClassification Result: UNCLASSIFIED', 'color: red');
+      console.log('Reason: No patterns matched with sufficient confidence');
+    }
+    
+    console.groupEnd();
+  }
+  
+  /**
+   * Generate comprehensive summary
+   * @private
+   */
+  _generateComprehensiveSummary(totalTime) {
+    // Calculate average confidence
+    let totalConfidence = 0;
+    let classifiedCount = 0;
+    
+    this.fields.forEach(field => {
+      if (field.classification) {
+        totalConfidence += field.classification.confidence;
+        classifiedCount++;
+      }
+    });
+    
+    this.classificationSummary.avgConfidence = classifiedCount > 0 ? 
+      Math.round(totalConfidence / classifiedCount) : 0;
+    
+    return {
+      summary: {
+        total: this.classificationSummary.total,
+        classified: this.classificationSummary.classified,
+        unclassified: this.classificationSummary.unclassified.length,
+        avgConfidence: this.classificationSummary.avgConfidence,
+        classificationRate: Math.round((this.classificationSummary.classified / this.classificationSummary.total) * 100)
+      },
+      byCategory: this.classificationSummary.byCategory,
+      byType: this.classificationSummary.byType,
+      lowConfidence: this.classificationSummary.lowConfidence,
+      unclassified: this.classificationSummary.unclassified,
+      performance: {
+        totalTime: `${totalTime.toFixed(2)}ms`,
+        avgTimePerField: `${(totalTime / this.classificationSummary.total).toFixed(2)}ms`
+      },
+      issues: {
+        duplicates: this.classificationSummary.duplicates,
+        suspicious: this.classificationSummary.suspicious
+      }
+    };
+  }
+  
+  /**
+   * Log comprehensive summary
+   * @private
+   */
+  _logComprehensiveSummary(summary) {
+    console.group('%c[CLASSIFICATION SUMMARY]', 'color: blue; font-weight: bold; font-size: 14px');
+    
+    // Overall stats
+    console.log('%cOverall Statistics:', 'font-weight: bold');
+    console.table(summary.summary);
+    
+    // Category breakdown
+    console.log('%cFields by Category:', 'font-weight: bold');
+    const categoryTable = {};
+    Object.entries(summary.byCategory).forEach(([category, fields]) => {
+      categoryTable[category] = {
+        count: fields.length,
+        avgConfidence: Math.round(
+          fields.reduce((sum, f) => sum + f.classification.confidence, 0) / fields.length
+        ),
+        fields: fields.map(f => f.label?.text || f.name || f.id).join(', ')
+      };
+    });
+    console.table(categoryTable);
+    
+    // Type breakdown
+    console.log('%cFields by Type:', 'font-weight: bold');
+    const typeTable = {};
+    Object.entries(summary.byType).forEach(([type, fields]) => {
+      typeTable[type] = {
+        count: fields.length,
+        classified: fields.filter(f => f.classification).length,
+        unclassified: fields.filter(f => !f.classification).length
+      };
+    });
+    console.table(typeTable);
+    
+    // Low confidence fields
+    if (summary.lowConfidence.length > 0) {
+      console.log('%cLow Confidence Fields (< 70%):', 'color: orange; font-weight: bold');
+      summary.lowConfidence.forEach(field => {
+        console.log(`- ${field.label?.text || field.name}: ${field.classification.category} (${field.classification.confidence}%)`);
+      });
+    }
+    
+    // Unclassified fields
+    if (summary.unclassified.length > 0) {
+      console.log('%cUnclassified Fields:', 'color: red; font-weight: bold');
+      summary.unclassified.forEach(field => {
+        console.log(`- ${field.label?.text || field.name || field.id} (${field.type})`);
+      });
+    }
+    
+    // Performance metrics
+    console.log('%cPerformance Metrics:', 'font-weight: bold');
+    console.table(summary.performance);
+    
+    // Issues
+    if (Object.keys(summary.issues.duplicates).length > 0) {
+      console.log('%cDuplicate Classifications:', 'color: orange; font-weight: bold');
+      console.log(summary.issues.duplicates);
+    }
+    
+    if (summary.issues.suspicious.length > 0) {
+      console.log('%cSuspicious Fields:', 'color: red; font-weight: bold');
+      console.table(summary.issues.suspicious);
+    }
+    
+    console.groupEnd();
+  }
+  
+  /**
+   * Perform validation checks
+   * @private
+   */
+  _performValidationChecks() {
+    const checks = [
+      {
+        name: 'Business/Legal Name field classified as business_name',
+        test: () => {
+          const field = this.fields.find(f => 
+            f.label?.text?.toLowerCase().includes('business') && 
+            f.label?.text?.toLowerCase().includes('name')
+          );
+          return field && field.classification?.category === 'business_name';
+        }
+      },
+      {
+        name: 'Organization Type dropdown classified as entity_type',
+        test: () => {
+          const field = this.fields.find(f => 
+            (f.label?.text?.toLowerCase().includes('organization type') ||
+             f.label?.text?.toLowerCase().includes('entity type')) &&
+            f.type === 'select'
+          );
+          return !field || field.classification?.category === 'entity_type';
+        }
+      },
+      {
+        name: 'FEIN/EIN field classified as ein or tax_id',
+        test: () => {
+          const field = this.fields.find(f => 
+            f.label?.text?.toLowerCase().match(/fein|ein|employer.*identification/)
+          );
+          return !field || ['ein', 'tax_id'].includes(field.classification?.category);
+        }
+      },
+      {
+        name: 'DC-specific fields recognized (if DC form)',
+        test: () => {
+          if (this.options.state !== 'DC') return true;
+          const dcField = this.fields.find(f => 
+            f.label?.text?.toLowerCase().includes('clean hands') ||
+            f.label?.text?.toLowerCase().includes('dcra')
+          );
+          return !dcField || dcField.classification !== null;
+        }
+      },
+      {
+        name: 'Address fields properly identified',
+        test: () => {
+          const addressFields = this.fields.filter(f => 
+            f.label?.text?.toLowerCase().match(/street|address|city|state|zip/)
+          );
+          const classifiedAddress = addressFields.filter(f => 
+            f.classification?.category?.includes('address') ||
+            f.classification?.category === 'city' ||
+            f.classification?.category === 'state' ||
+            f.classification?.category === 'zip'
+          );
+          return addressFields.length === 0 || classifiedAddress.length > 0;
+        }
+      },
+      {
+        name: 'Required fields marked appropriately',
+        test: () => {
+          const requiredFields = this.fields.filter(f => f.required);
+          const classifiedRequired = requiredFields.filter(f => f.classification);
+          return requiredFields.length === 0 || 
+                 (classifiedRequired.length / requiredFields.length) >= 0.8;
+        }
+      }
+    ];
+    
+    const results = checks.map(check => ({
+      ...check,
+      passed: check.test()
+    }));
+    
+    return {
+      checks: results,
+      passed: results.filter(r => r.passed).length,
+      failed: results.filter(r => !r.passed).length,
+      score: Math.round((results.filter(r => r.passed).length / results.length) * 100)
+    };
+  }
+  
+  /**
+   * Log validation results
+   * @private
+   */
+  _logValidationResults(validation) {
+    console.group('%c[VALIDATION CHECKS]', 'color: purple; font-weight: bold; font-size: 14px');
+    
+    validation.checks.forEach(check => {
+      const icon = check.passed ? '✅' : '❌';
+      const color = check.passed ? 'green' : 'red';
+      console.log(`%c${icon} ${check.name}`, `color: ${color}`);
+    });
+    
+    console.log('\n%cValidation Score:', 'font-weight: bold', `${validation.score}%`);
+    console.log(`Passed: ${validation.passed}, Failed: ${validation.failed}`);
+    
+    console.groupEnd();
+  }
+  
+  /**
+   * Check readiness for UI display
+   * @private
+   */
+  _checkReadiness(summary, validation) {
+    const criticalFieldsFound = Object.values(this.classificationSummary.criticalFields)
+      .filter(f => f !== null).length;
+    
+    const categoryCount = Object.keys(summary.byCategory).length;
+    
+    const checks = {
+      classificationRate: summary.summary.classificationRate >= 60,
+      criticalFields: criticalFieldsFound >= 2,
+      categoryDiversity: categoryCount >= 3,
+      avgConfidence: summary.summary.avgConfidence >= 70,
+      validationScore: validation.score >= 70
+    };
+    
+    const isReady = Object.values(checks).every(check => check);
+    
+    return {
+      isReady,
+      checks,
+      score: Math.round(
+        (Object.values(checks).filter(c => c).length / Object.keys(checks).length) * 100
+      ),
+      criticalFieldsFound,
+      categoryCount
+    };
+  }
+  
+  /**
+   * Log readiness check results
+   * @private
+   */
+  _logReadinessCheck(readiness) {
+    console.group('%c[READINESS CHECK]', 'font-weight: bold; font-size: 16px');
+    
+    const status = readiness.isReady ? 
+      '%c✅ READY FOR UI' : 
+      '%c⚠️ NEEDS IMPROVEMENT';
+    const color = readiness.isReady ? 'color: green' : 'color: orange';
+    
+    console.log(status, `${color}; font-weight: bold; font-size: 14px`);
+    console.log(`\nReadiness Score: ${readiness.score}%`);
+    
+    console.log('\nChecklist:');
+    Object.entries(readiness.checks).forEach(([check, passed]) => {
+      const icon = passed ? '✅' : '❌';
+      const checkName = check.replace(/([A-Z])/g, ' $1').toLowerCase();
+      console.log(`${icon} ${checkName}`);
+    });
+    
+    console.log(`\nCritical fields found: ${readiness.criticalFieldsFound}/3`);
+    console.log(`Categories identified: ${readiness.categoryCount}`);
+    
+    if (!readiness.isReady) {
+      console.log('\n%cRecommendations:', 'font-weight: bold');
+      if (!readiness.checks.classificationRate) {
+        console.log('- Improve field pattern matching');
+      }
+      if (!readiness.checks.criticalFields) {
+        console.log('- Ensure business name, EIN, and entity type fields are identified');
+      }
+      if (!readiness.checks.avgConfidence) {
+        console.log('- Review low confidence classifications');
+      }
+    }
+    
+    console.groupEnd();
+  }
+  
+  /**
+   * Get UI-ready data structure
+   * @returns {Object} Structured data for UI display
+   */
+  getUIData() {
+    const categories = {
+      business_info: {
+        label: 'Business Information',
+        fields: [],
+        priority: 1
+      },
+      contact_info: {
+        label: 'Contact Information',
+        fields: [],
+        priority: 2
+      },
+      address_info: {
+        label: 'Address Information',
+        fields: [],
+        priority: 3
+      },
+      tax_info: {
+        label: 'Tax Information',
+        fields: [],
+        priority: 4
+      },
+      other: {
+        label: 'Additional Information',
+        fields: [],
+        priority: 5
+      }
+    };
+    
+    // Organize fields by category
+    this.fields.forEach(field => {
+      if (!field.classification) return;
+      
+      const category = field.classification.category;
+      let targetCategory = 'other';
+      
+      // Map field categories to UI categories
+      if (['business_name', 'entity_type', 'dba'].includes(category)) {
+        targetCategory = 'business_info';
+      } else if (['email', 'phone', 'fax'].includes(category)) {
+        targetCategory = 'contact_info';
+      } else if (['address', 'city', 'state', 'zip'].includes(category)) {
+        targetCategory = 'address_info';
+      } else if (['ein', 'tax_id', 'ssn'].includes(category)) {
+        targetCategory = 'tax_info';
+      }
+      
+      categories[targetCategory].fields.push({
+        element: field.element,
+        label: field.label?.text || field.placeholder || field.name,
+        type: field.type,
+        required: field.required,
+        category: category,
+        confidence: field.classification.confidence,
+        value: field.value
+      });
+    });
+    
+    // Sort categories by priority and remove empty ones
+    const sortedCategories = Object.entries(categories)
+      .filter(([_, cat]) => cat.fields.length > 0)
+      .sort((a, b) => a[1].priority - b[1].priority)
+      .reduce((acc, [key, value]) => {
+        acc[key] = value;
+        return acc;
+      }, {});
+    
+    return {
+      categories: sortedCategories,
+      summary: this.classificationSummary,
+      totalFields: this.fields.length,
+      classifiedFields: this.classificationSummary.classified
+    };
   }
 }
 
