@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "Business Registration Assistant",
+  "version": "1.0",
+  "description": "Detects and assists with business registration forms - standalone version",
+  "permissions": [],
+  "host_permissions": [],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.gov/*",
+        "*://*.state.us/*",
+        "*://*.ca.gov/*",
+        "*://*.ny.gov/*",
+        "*://*.tx.gov/*",
+        "*://*.fl.gov/*",
+        "*://*.de.gov/*",
+        "*://mytax.dc.gov/*",
+        "*://*.business.ca.gov/*",
+        "*://*.businessexpress.ny.gov/*",
+        "*://*.sunbiz.org/*",
+        "*://*.sos.state.us/*",
+        "*://*.tax.gov/*",
+        "*://*.revenue.gov/*"
+      ],
+      "js": ["content_standalone.js"],
+      "run_at": "document_end",
+      "all_frames": true
+    }
+  ],
+  "action": {
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

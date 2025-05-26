@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Business Registration Assistant</title>
+  <link rel="stylesheet" href="panel.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Confidence meter at the very top -->
+    <div id="confidence-meter" class="confidence-meter">
+      <div class="confidence-bar-container">
+        <div id="confidence-bar-top" class="confidence-bar-top"></div>
+        <span id="confidence-text" class="confidence-text">Detecting...</span>
+      </div>
+    </div>
+    
+    <!-- User Navigation Header -->
+    <div class="user-nav-header">
+      <button id="endeavors-button" class="nav-button">My Endeavors</button>
+      <button id="user-button" class="nav-button user-button">USER</button>
+    </div>
+    
+    
+    <div id="error-container" class="error-container"></div>
+    
+    <div id="main-content" class="view">
+      <!-- Fields Detected Section -->
+      <div id="fields-section" class="fields-section">
+        <h3 class="section-header">Fields Detected</h3>
+        <div id="fields-container" class="fields-container">
+          <div id="fields-list" class="fields-list">
+            <!-- Fields will be dynamically populated here -->
+            <div class="no-fields-message">No fields detected yet</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Chat Interface -->
+    <div id="chat-container" class="chat-section">
+      <div class="chat-header">
+        <h2>Registration Assistant</h2>
+        <button id="auto-fill-button" class="auto-fill-button">Auto Fill</button>
+      </div>
+      <div id="chat-messages" class="chat-messages">
+        <div class="message system">
+          Hello! I'm your business registration assistant. How can I help you today?
+        </div>
+      </div>
+      <form id="chat-form" class="chat-input-form">
+        <input type="text" id="chat-input" placeholder="Type your question here..." />
+        <button type="submit" id="chat-submit">Send</button>
+      </form>
+    </div>
+    
+    <footer>
+      <div>Business Registration Assistant v0.1</div>
+    </footer>
+  </div>
+  
+  <!-- Load external JavaScript files -->
+  <script src="panel_no_flicker.js"></script>
+  <script src="chat.js"></script>
+</body>
+</html>

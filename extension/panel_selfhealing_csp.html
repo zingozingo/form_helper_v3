@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Business Registration Assistant</title>
+  <link rel="stylesheet" href="panel.css">
+  <link rel="stylesheet" href="panel_selfhealing_csp.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Panel Header with Connection Indicator -->
+    <div class="panel-header">
+      <h2>Business Registration Assistant</h2>
+      <div id="connection-indicator" class="connection-indicator connected"></div>
+    </div>
+    
+    <!-- Status Messages -->
+    <div id="status" class="status hidden"></div>
+    
+    <!-- Detection Info -->
+    <div id="detection-info" class="detection-info hidden">
+      <div id="form-name" class="form-name">Analyzing form...</div>
+      
+      <div class="confidence-info">
+        <div class="confidence-meter">
+          <div id="confidence-meter" class="confidence-bar confidence-0"></div>
+        </div>
+        <span id="confidence-text" class="confidence-text">0% confidence</span>
+      </div>
+      
+      <div id="state-info" class="state-info hidden"></div>
+    </div>
+    
+    <!-- Fields Container -->
+    <div class="fields-container">
+      <div id="field-count" class="field-count">No fields detected</div>
+      <div id="fields-list" class="fields-list"></div>
+    </div>
+    
+    <!-- No Detection State -->
+    <div id="no-detection" class="no-detection">
+      <div class="no-detection-icon">📋</div>
+      <div class="no-detection-text">No form detected on this page</div>
+      <div class="no-detection-hint">Navigate to a business registration form to begin</div>
+    </div>
+    
+    <!-- Action Buttons -->
+    <div class="actions">
+      <button id="refresh-btn" class="btn btn-secondary">
+        Refresh Detection
+      </button>
+      <button id="auto-fill-btn" class="btn btn-primary" disabled>
+        Auto Fill Form
+      </button>
+    </div>
+    
+    <!-- Last Update -->
+    <div id="last-update" class="last-update"></div>
+  </div>
+  
+  <script src="panel_selfhealing_csp.js"></script>
+</body>
+</html>

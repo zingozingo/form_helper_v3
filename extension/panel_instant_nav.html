@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Business Registration Assistant</title>
+  <link rel="stylesheet" href="panel.css">
+  <style>
+    /* Instant navigation specific styles */
+    .field-item {
+      opacity: 1;
+      transform: translateY(0);
+      transition: all 0.2s ease-out;
+    }
+    
+    .field-item.entering {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    
+    .field-item.leaving {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    
+    .detecting-state .fields-list {
+      min-height: 100px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .detecting-message {
+      color: #666;
+      font-style: italic;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 0.6; }
+      50% { opacity: 1; }
+    }
+    
+    .confidence-text.detecting {
+      animation: pulse 1s ease-in-out infinite;
+    }
+    
+    /* Smooth transitions */
+    .confidence-bar-top {
+      transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
+                  background-color 0.3s ease;
+    }
+    
+    .field-section-header {
+      opacity: 0;
+      animation: fadeIn 0.3s ease-out forwards;
+      animation-delay: 0.1s;
+    }
+    
+    @keyframes fadeIn {
+      to {
+        opacity: 1;
+      }
+    }
+    
+    /* Navigation indicator */
+    .navigation-indicator {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: #FFC107;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    
+    .navigation-indicator.active {
+      opacity: 1;
+      animation: blink 1s ease-in-out infinite;
+    }
+    
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Confidence meter with navigation indicator -->
+    <div id="confidence-meter" class="confidence-meter">
+      <div class="confidence-bar-container">
+        <div id="confidence-bar-top" class="confidence-bar-top"></div>
+        <span id="confidence-text" class="confidence-text">Detecting...</span>
+        <div id="navigation-indicator" class="navigation-indicator"></div>
+      </div>
+    </div>
+    
+    <!-- User Navigation Header -->
+    <div class="user-nav-header">
+      <button id="endeavors-button" class="nav-button">My Endeavors</button>
+      <button id="user-button" class="nav-button user-button">USER</button>
+    </div>
+    
+    <div id="error-container" class="error-container"></div>
+    
+    <div id="main-content" class="view">
+      <!-- Fields Detected Section -->
+      <div id="fields-section" class="fields-section">
+        <h3 class="section-header">Fields Detected</h3>
+        <div id="fields-container" class="fields-container">
+          <div id="fields-list" class="fields-list">
+            <div class="no-fields-message">Ready to detect forms</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- No Detection View -->
+      <div id="no-detection" class="view" style="display: none;">
+        <p>No business registration form detected on this page.</p>
+        <p>Navigate to a government business registration form to begin.</p>
+        <div class="auto-detection-notice">
+          Forms are detected instantly as you navigate.
+        </div>
+      </div>
+    </div>
+    
+    <!-- Chat Interface -->
+    <div id="chat-container" class="chat-section">
+      <div class="chat-header">
+        <h2>Registration Assistant</h2>
+        <button id="auto-fill-button" class="auto-fill-button">Auto Fill</button>
+      </div>
+      <div id="chat-messages" class="chat-messages">
+        <div class="message system">
+          Hello! I'm your business registration assistant. Navigate through form pages and I'll detect fields instantly.
+        </div>
+      </div>
+      <form id="chat-form" class="chat-input-form">
+        <input type="text" id="chat-input" placeholder="Type your question here..." />
+        <button type="submit" id="chat-submit">Send</button>
+      </form>
+    </div>
+    
+    <footer>
+      <div>Business Registration Assistant v0.2 - Instant Navigation</div>
+    </footer>
+  </div>
+  
+  <script src="panel_instant_nav.js"></script>
+  <script src="chat.js"></script>
+</body>
+</html>
