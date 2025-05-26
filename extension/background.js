@@ -3,6 +3,110 @@
  * Implementation that manages detection results and handles panel
  */
 
+// Inline messaging utilities for service worker compatibility
+const messagingUtils = {
+  isContextValid() {
+    try {
+      // Check if chrome.runtime.id exists - this will be undefined if context is invalid
+      return !!(chrome.runtime && chrome.runtime.id);
+    } catch (e) {
+      return false;
+    }
+  },
+  
+  async sendMessage(message) {
+    if (!this.isContextValid()) {
+      console.warn('[BRA Background] Extension context invalid, message not sent');
+      return null;
+    }
+    
+    return new Promise((resolve) => {
+      try {
+        chrome.runtime.sendMessage(message, (response) => {
+          if (chrome.runtime.lastError) {
+            const error = chrome.runtime.lastError;
+            // Only log if it's not a common/expected error
+            if (!error.message?.includes('Receiving end does not exist') &&
+                !error.message?.includes('Extension context invalidated') &&
+                !error.message?.includes('The message port closed')) {
+              console.warn('[BRA Background] Message error:', error.message);
+            }
+            resolve(null);
+          } else {
+            resolve(response);
+          }
+        });
+      } catch (error) {
+        if (!error.message?.includes('Extension context invalidated')) {
+          console.error('[BRA Background] Failed to send message:', error);
+        }
+        resolve(null);
+      }
+    });
+  },
+  
+  async sendMessageToTab(tabId, message) {
+    if (!this.isContextValid() || !tabId) {
+      return null;
+    }
+    
+    return new Promise((resolve) => {
+      try {
+        chrome.tabs.sendMessage(tabId, message, (response) => {
+          if (chrome.runtime.lastError) {
+            const error = chrome.runtime.lastError;
+            if (!error.message?.includes('Receiving end does not exist') &&
+                !error.message?.includes('Extension context invalidated')) {
+              console.warn('[BRA Background] Tab message error:', error.message);
+            }
+            resolve(null);
+          } else {
+            resolve(response);
+          }
+        });
+      } catch (error) {
+        if (!error.message?.includes('Extension context invalidated')) {
+          console.error('[BRA Background] Failed to send tab message:', error);
+        }
+        resolve(null);
+      }
+    });
+  }
+};
+
+// URL patterns where content scripts are injected (from manifest.json)
+const CONTENT_SCRIPT_PATTERNS = [
+  /^https?:\/\/[^\/]*\.gov\//,
+  /^https?:\/\/[^\/]*\.state\.us\//,
+  /^https?:\/\/[^\/]*\.ca\.gov\//,
+  /^https?:\/\/[^\/]*\.ny\.gov\//,
+  /^https?:\/\/[^\/]*\.tx\.gov\//,
+  /^https?:\/\/[^\/]*\.fl\.gov\//,
+  /^https?:\/\/[^\/]*\.de\.gov\//,
+  /^https?:\/\/mytax\.dc\.gov\//,
+  /^https?:\/\/[^\/]*\.mytax\.dc\.gov\//,
+  /^https?:\/\/[^\/]*\.business\.ca\.gov\//,
+  /^https?:\/\/[^\/]*\.businessexpress\.ny\.gov\//,
+  /^https?:\/\/[^\/]*\.efile\.sunbiz\.org\//,
+  /^https?:\/\/[^\/]*\.dos\.myflorida\.com\//,
+  /^https?:\/\/sos\.state\.us\//,
+  /^https?:\/\/[^\/]*\.sos\.state\.us\//,
+  /^https?:\/\/[^\/]*\.tax\.gov\//,
+  /^https?:\/\/tax\.ny\.gov\//,
+  /^https?:\/\/tax\.ca\.gov\//,
+  /^https?:\/\/tax\.fl\.gov\//,
+  /^https?:\/\/tax\.dc\.gov\//,
+  /^https?:\/\/[^\/]*\.revenue\.gov\//,
+  /^https?:\/\/revenue\.state\.us\//,
+  /^https?:\/\/[^\/]*\.sunbiz\.org\//
+];
+
+// Check if a URL matches our content script patterns
+function isValidContentScriptUrl(url) {
+  if (!url) return false;
+  return CONTENT_SCRIPT_PATTERNS.some(pattern => pattern.test(url));
+}
+
 // Store detection results and errors by tab ID
 const detectionResults = {};
 const detectionErrors = {};
@@ -10,6 +114,37 @@ const detectionErrors = {};
 // Track active content scripts
 const connectedTabs = {};
 const tabLastPingTime = {};
+
+// Safe message sending to runtime (panel/popup)
+async function sendRuntimeMessage(message) {
+  try {
+    // Use messaging utils if available
+    if (messagingUtils && messagingUtils.sendMessage) {
+      return await messagingUtils.sendMessage(message);
+    }
+    
+    // Fallback to direct send
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage(message, (response) => {
+        if (chrome.runtime.lastError) {
+          // Only log if it's not "no receiving end" error
+          if (!chrome.runtime.lastError.message?.includes('Receiving end does not exist') &&
+              !chrome.runtime.lastError.message?.includes('Extension context invalidated')) {
+            console.warn('[BRA Background] Runtime message error:', chrome.runtime.lastError.message);
+          }
+          resolve(null);
+        } else {
+          resolve(response);
+        }
+      });
+    });
+  } catch (error) {
+    if (!error.message?.includes('Extension context invalidated')) {
+      console.error('[BRA Background] Failed to send runtime message:', error);
+    }
+    return null;
+  }
+}
 
 // Update badge when a form is detected
 function updateBadge(tabId, isDetected, confidenceScore = 0, hasError = false) {
@@ -76,17 +211,34 @@ function isTabConnected(tabId) {
 function pingTab(tabId) {
   return new Promise((resolve, reject) => {
     try {
-      chrome.tabs.sendMessage(tabId, { action: 'ping', timestamp: Date.now() }, function(response) {
-        if (chrome.runtime.lastError) {
-          console.warn('[BRA] Ping error:', chrome.runtime.lastError.message);
-          reject(chrome.runtime.lastError);
-        } else if (response && response.alive) {
-          connectedTabs[tabId] = true;
-          tabLastPingTime[tabId] = Date.now();
-          resolve(response);
-        } else {
-          reject(new Error('Invalid ping response'));
+      // First check if tab is valid and has a matching URL
+      chrome.tabs.get(tabId, function(tab) {
+        if (chrome.runtime.lastError || !tab) {
+          reject(new Error('Tab not found'));
+          return;
         }
+        
+        // Check if URL matches content script patterns
+        if (!isValidContentScriptUrl(tab.url)) {
+          reject(new Error('Tab URL does not match content script patterns'));
+          return;
+        }
+        
+        chrome.tabs.sendMessage(tabId, { action: 'ping', timestamp: Date.now() }, function(response) {
+          if (chrome.runtime.lastError) {
+            // Silently ignore - this is expected when tab doesn't have content script
+            reject(chrome.runtime.lastError);
+            return;
+          }
+          
+          if (response && response.alive) {
+            connectedTabs[tabId] = true;
+            tabLastPingTime[tabId] = Date.now();
+            resolve(response);
+          } else {
+            reject(new Error('Invalid ping response'));
+          }
+        });
       });
     } catch (e) {
       reject(e);
@@ -122,6 +274,158 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (tabId) {
     connectedTabs[tabId] = true;
     tabLastPingTime[tabId] = Date.now();
+  }
+  
+  // Handle content script handshake
+  if (message.action === 'contentScriptReady') {
+    console.log('[BRA Background] Content script ready on tab:', tabId, 'URL:', message.url);
+    connectedTabs[tabId] = true;
+    tabLastPingTime[tabId] = Date.now();
+    
+    // Forward to panel if it's open
+    sendRuntimeMessage({
+      action: 'contentScriptReady',
+      tabId: tabId,
+      url: message.url
+    });
+    
+    sendResponse({acknowledged: true});
+    return true;
+  }
+  
+  // Handle navigation detection (immediate notification)
+  if (message.action === 'navigationDetected') {
+    console.log('[BRA Background] Navigation detected for tab:', tabId, message);
+    
+    // Clear previous detection for this tab immediately
+    if (detectionResults[tabId]) {
+      delete detectionResults[tabId];
+    }
+    
+    // Clear previous errors
+    if (detectionErrors[tabId]) {
+      delete detectionErrors[tabId];
+    }
+    
+    // Reset badge
+    updateBadge(tabId, false, 0, false);
+    
+    // Forward to panel immediately
+    try {
+      chrome.runtime.sendMessage({
+        action: 'navigationDetected',
+        tabId: tabId,
+        oldUrl: message.oldUrl,
+        newUrl: message.newUrl,
+        isHashChange: message.isHashChange,
+        timestamp: message.timestamp
+      }, function(response) {
+        if (chrome.runtime.lastError) {
+          // Panel not open - this is normal
+        }
+      });
+    } catch (e) {
+      // Panel might not be open
+    }
+    
+    sendResponse({acknowledged: true});
+    return true;
+  }
+  
+  // Handle URL change from content script
+  if (message.action === 'urlChanged') {
+    console.log('[BRA Background] URL changed for tab:', tabId, 'New URL:', message.newUrl);
+    
+    // Clear previous detection for this tab
+    if (detectionResults[tabId]) {
+      delete detectionResults[tabId];
+    }
+    
+    // Clear previous errors
+    if (detectionErrors[tabId]) {
+      delete detectionErrors[tabId];
+    }
+    
+    // Reset badge
+    updateBadge(tabId, false, 0, false);
+    
+    // Forward to panel if it's open
+    try {
+      chrome.runtime.sendMessage({
+        action: 'urlChanged',
+        tabId: tabId,
+        newUrl: message.newUrl,
+        timestamp: message.timestamp
+      }, function(response) {
+        if (chrome.runtime.lastError) {
+          // Panel not open - this is normal
+        }
+      });
+    } catch (e) {
+      // Panel might not be open
+    }
+    
+    sendResponse({acknowledged: true});
+    return true;
+  }
+  
+  // Handle content change from content script
+  if (message.action === 'contentChanged') {
+    console.log('[BRA Background] Content changed for tab:', tabId);
+    
+    // Clear previous detection for this tab
+    if (detectionResults[tabId]) {
+      delete detectionResults[tabId];
+    }
+    
+    // Clear previous errors
+    if (detectionErrors[tabId]) {
+      delete detectionErrors[tabId];
+    }
+    
+    // Reset badge temporarily
+    updateBadge(tabId, false, 0, false);
+    
+    // Forward to panel if it's open
+    try {
+      chrome.runtime.sendMessage({
+        action: 'contentChanged',
+        tabId: tabId,
+        timestamp: message.timestamp
+      }, function(response) {
+        if (chrome.runtime.lastError) {
+          // Panel not open - this is normal
+        }
+      });
+    } catch (e) {
+      // Panel might not be open
+    }
+    
+    sendResponse({acknowledged: true});
+    return true;
+  }
+  
+  // Handle conditional fields change from content script
+  if (message.action === 'conditionalFieldsChanged') {
+    console.log('[BRA Background] Conditional fields changed for tab:', tabId);
+    
+    // Forward to panel if it's open
+    try {
+      chrome.runtime.sendMessage({
+        action: 'conditionalFieldsChanged',
+        tabId: tabId,
+        timestamp: message.timestamp
+      }, function(response) {
+        if (chrome.runtime.lastError) {
+          // Panel not open - this is normal
+        }
+      });
+    } catch (e) {
+      // Panel might not be open
+    }
+    
+    sendResponse({acknowledged: true});
+    return true;
   }
   
   // Handle ping from content script
@@ -164,13 +468,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         result: message.result
       }, function(response) {
         if (chrome.runtime.lastError) {
-          console.log('[BRA Background] No panel listening for updates (this is normal)');
-        } else {
-          console.log('[BRA Background] Successfully notified panel of detection update');
+          // Silently ignore - panel might not be open
+          return;
         }
+        console.log('[BRA Background] Successfully notified panel of detection update');
       });
     } catch (error) {
-      console.log('[BRA Background] Could not notify panel:', error.message);
+      // Silently ignore - panel might not be open
     }
 
     // Acknowledge the message
@@ -234,34 +538,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     
     console.log('[BRA Background] Forwarding to panel:', panelMessage);
     
-    // Try multiple methods to send to panel
-    try {
-      // Method 1: Direct runtime message
-      chrome.runtime.sendMessage(panelMessage, function(response) {
-        if (chrome.runtime.lastError) {
-          console.log('[BRA Background] Method 1 failed:', chrome.runtime.lastError.message);
-        } else {
-          console.log('[BRA Background] Method 1 success:', response);
-        }
-      });
-      
-      // Method 2: Also try sending directly as updateDetection
-      chrome.runtime.sendMessage({
-        type: 'updateDetection',
-        isDetected: message.isDetected,
-        state: message.state,
-        confidence: message.confidence,
-        fields: message.fields
-      }, function(response) {
-        if (chrome.runtime.lastError) {
-          console.log('[BRA Background] Method 2 failed:', chrome.runtime.lastError.message);
-        } else {
-          console.log('[BRA Background] Method 2 success:', response);
-        }
-      });
-    } catch (error) {
-      console.log('[BRA Background] Could not forward to panel:', error.message);
-    }
+    // Send to panel using safe method
+    sendRuntimeMessage(panelMessage);
+    
+    // Also send as updateDetection format for compatibility
+    sendRuntimeMessage({
+      type: 'updateDetection',
+      isDetected: message.isDetected,
+      state: message.state,
+      confidence: message.confidence,
+      fields: message.fields
+    });
     
     sendResponse({ success: true, received: true });
   }
@@ -305,15 +592,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         tabId: tabId,
         result: detectionResults[tabId]
       }, function(response) {
-        // Check for errors but don't throw - panel might not be listening
         if (chrome.runtime.lastError) {
-          console.log('[BRA Background] No panel listening for updates (this is normal):', chrome.runtime.lastError.message);
-        } else {
-          console.log('[BRA Background] Successfully notified panel of update');
+          // Silently ignore - panel might not be open
+          return;
         }
+        console.log('[BRA Background] Successfully notified panel of update');
       });
     } catch (error) {
-      console.log('[BRA Background] Could not notify panel (panel might be closed):', error.message);
+      // Silently ignore - panel might not be open
     }
     
     sendResponse({ success: true });
@@ -477,16 +763,30 @@ chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) =
     if (buttonIndex === 0) {
       chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
         if (tabs && tabs[0] && tabs[0].id) {
-          // Send trigger detection message
-          chrome.tabs.sendMessage(tabs[0].id, {
-            action: 'triggerDetection',
-            retry: true
-          }, function(response) {
-            if (chrome.runtime.lastError) {
-              console.error('[BRA] Failed to trigger retry:', chrome.runtime.lastError.message);
-            } else {
-              console.log('[BRA] Retry triggered successfully');
+          // First check if tab is valid
+          chrome.tabs.get(tabs[0].id, function(tab) {
+            if (chrome.runtime.lastError || !tab || !tab.url || !tab.url.startsWith('http')) {
+              console.error('[BRA] Invalid tab for retry');
+              return;
             }
+            
+            // Check if URL matches content script patterns
+            if (!isValidContentScriptUrl(tab.url)) {
+              console.log('[BRA] Tab URL does not match content script patterns, skipping retry');
+              return;
+            }
+            
+            // Send trigger detection message
+            chrome.tabs.sendMessage(tabs[0].id, {
+              action: 'triggerDetection',
+              retry: true
+            }, function(response) {
+              if (chrome.runtime.lastError) {
+                // Silently ignore - this is expected when tab doesn't have content script
+                return;
+              }
+              console.log('[BRA] Retry triggered successfully');
+            });
           });
         }
       });

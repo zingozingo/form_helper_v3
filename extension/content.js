@@ -9,10 +9,20 @@ const DEBUG_MODE = true; // Set to true for verbose logging
 // Import modules with proper error handling
 let URLDetector = null;
 let FieldDetector = null;
+let messagingUtils = null;
+
+// Promise to track module loading
+let modulesLoadedPromise = null;
 
 // Load modules with reliable non-dynamic approach
-(async function loadModules() {
+modulesLoadedPromise = (async function loadModules() {
   try {
+    // Load messaging utilities module
+    const messagingUtilsURL = chrome.runtime.getURL('modules/messagingUtils.js');
+    const messagingModule = await import(messagingUtilsURL);
+    messagingUtils = messagingModule.default || messagingModule.messagingUtils || messagingModule;
+    console.log('[BRA] MessagingUtils module loaded successfully');
+    
     // Load URL detector module
     const urlDetectorURL = chrome.runtime.getURL('modules/urlDetector.js');
     URLDetector = await import(urlDetectorURL);
@@ -22,17 +32,73 @@ let FieldDetector = null;
     const fieldDetectorURL = chrome.runtime.getURL('modules/fieldDetector.js');
     FieldDetector = await import(fieldDetectorURL);
     console.log('[BRA] FieldDetector module loaded successfully');
+    
+    return true;
   } catch (error) {
     console.error('[BRA] Error loading modules:', error);
+    console.error('[BRA] Error details:', {
+      message: error.message,
+      stack: error.stack,
+      messagingUtilsURL: chrome.runtime.getURL('modules/messagingUtils.js'),
+      urlDetectorURL: chrome.runtime.getURL('modules/urlDetector.js'),
+      fieldDetectorURL: chrome.runtime.getURL('modules/fieldDetector.js')
+    });
     // Create fallback implementations if modules fail to load
+    if (!messagingUtils) {
+      console.log('[BRA] Creating fallback messaging utilities');
+      messagingUtils = createFallbackMessagingUtils();
+    }
     if (!URLDetector) {
+      console.log('[BRA] Creating fallback URLDetector');
       URLDetector = createFallbackURLDetector();
     }
     if (!FieldDetector) {
+      console.log('[BRA] Creating fallback FieldDetector');
       FieldDetector = createFallbackFieldDetector();
     }
+    return false;
   }
 })();
+
+// Fallback implementation for messaging utilities
+function createFallbackMessagingUtils() {
+  return {
+    isContextValid() {
+      try {
+        return chrome.runtime && chrome.runtime.id;
+      } catch (e) {
+        return false;
+      }
+    },
+    
+    async sendMessage(message, callback) {
+      try {
+        if (!this.isContextValid()) {
+          console.warn('[BRA] Extension context invalid, message not sent');
+          if (callback) callback(null);
+          return null;
+        }
+        
+        return new Promise((resolve) => {
+          chrome.runtime.sendMessage(message, (response) => {
+            if (chrome.runtime.lastError) {
+              console.warn('[BRA] Message error:', chrome.runtime.lastError.message);
+              if (callback) callback(null);
+              resolve(null);
+            } else {
+              if (callback) callback(response);
+              resolve(response);
+            }
+          });
+        });
+      } catch (error) {
+        console.error('[BRA] Failed to send message:', error);
+        if (callback) callback(null);
+        return null;
+      }
+    }
+  };
+}
 
 // Fallback implementation for URL detector
 function createFallbackURLDetector() {
@@ -217,8 +283,33 @@ function reportError(errorParam, context, isFatal = false) {
  * @param {Function} errorCallback - Called after all retries fail
  * @param {number} retryCount - Current retry attempt
  */
-function sendMessageWithRetry(message, successCallback, errorCallback, retryCount = 0) {
+async function sendMessageWithRetry(message, successCallback, errorCallback, retryCount = 0) {
   try {
+    // Check if messaging utils is available
+    const messaging = messagingUtils || window.messagingUtils;
+    
+    // Check context validity - handle different possible structures
+    let contextValid = true;
+    if (messaging && typeof messaging.isContextValid === 'function') {
+      contextValid = messaging.isContextValid();
+    } else {
+      // Fallback context check
+      try {
+        contextValid = !!(chrome.runtime && chrome.runtime.id);
+      } catch (e) {
+        contextValid = false;
+      }
+    }
+    
+    if (!contextValid) {
+      // Context is invalid, don't retry
+      log('Extension context is invalid, not sending message');
+      if (errorCallback) {
+        errorCallback(new Error('Extension context invalidated'));
+      }
+      return;
+    }
+    
     // Generate unique ID for this message to track it
     const messageId = Date.now() + Math.random().toString(36).substr(2, 5);
     message.messageId = messageId;
@@ -230,65 +321,88 @@ function sendMessageWithRetry(message, successCallback, errorCallback, retryCoun
       timestamp: Date.now()
     };
     
-    // Send the message
-    chrome.runtime.sendMessage(message, function(response) {
-      // Check for error
-      if (chrome.runtime.lastError) {
-        const error = chrome.runtime.lastError;
+    // Send the message using safe messaging or fallback
+    let response = null;
+    if (messaging && typeof messaging.sendMessage === 'function') {
+      response = await messaging.sendMessage(message);
+    } else {
+      // Fallback to direct Chrome API
+      response = await new Promise((resolve) => {
+        chrome.runtime.sendMessage(message, (resp) => {
+          if (chrome.runtime.lastError) {
+            console.warn('[BRA] Message error:', chrome.runtime.lastError.message);
+            resolve(null);
+          } else {
+            resolve(resp);
+          }
+        });
+      });
+    }
+    
+    if (response === null) {
+      // Message failed
+      const error = chrome.runtime.lastError || new Error('Message send failed');
+      
+      // Check if it's a context invalidation error
+      if (error.message?.includes('Extension context invalidated') || 
+          error.message?.includes('Could not establish connection') ||
+          error.message?.includes('The message port closed')) {
+        // Don't retry on context invalidation
+        log('Extension context invalidated, stopping retries');
         
-        // If we have retries left, try again
-        if (retryCount < CONNECTION_RETRY_MAX) {
-          log('Message send error, retrying (' + (retryCount + 1) + '/' + CONNECTION_RETRY_MAX + '): ' + error.message);
-          
-          // Retry with exponential backoff
-          setTimeout(function() {
-            sendMessageWithRetry(message, successCallback, errorCallback, retryCount + 1);
-          }, CONNECTION_RETRY_DELAY * Math.pow(2, retryCount));
-        } else {
-          // We've exhausted retries
-          log('Message send failed after ' + CONNECTION_RETRY_MAX + ' retries');
-          
-          // Trigger error callback
-          if (errorCallback) {
-            errorCallback(error);
-          }
-          
-          // Clean up
-          delete pendingMessageCallbacks[messageId];
-          
-          // Report connection error unless this is already a report error call
-          if (message.action !== 'detectionError') {
-            const connectionError = new Error('Failed to establish connection: ' + error.message);
-            reportError(connectionError, 'messageSend', true);
-          }
+        // Trigger error callback
+        if (errorCallback) {
+          errorCallback(error);
         }
+        
+        // Clean up
+        delete pendingMessageCallbacks[messageId];
         return;
       }
       
-      // Success - call the callback
-      if (successCallback) {
-        successCallback(response);
+      // If we have retries left and it's not a context error, try again
+      if (retryCount < CONNECTION_RETRY_MAX) {
+        log('Message send error, retrying (' + (retryCount + 1) + '/' + CONNECTION_RETRY_MAX + ')');
+        
+        // Retry with exponential backoff
+        setTimeout(function() {
+          sendMessageWithRetry(message, successCallback, errorCallback, retryCount + 1);
+        }, CONNECTION_RETRY_DELAY * Math.pow(2, retryCount));
+      } else {
+        // We've exhausted retries
+        log('Message send failed after ' + CONNECTION_RETRY_MAX + ' retries');
+        
+        // Trigger error callback
+        if (errorCallback) {
+          errorCallback(error);
+        }
+        
+        // Clean up
+        delete pendingMessageCallbacks[messageId];
       }
-      
-      // Clean up
-      delete pendingMessageCallbacks[messageId];
-      
-      // Mark that we've established connection at least once
-      connectionEstablished = true;
-      connectionAttempts = 0;
-    });
+      return;
+    }
+    
+    // Success - call the callback
+    if (successCallback) {
+      successCallback(response);
+    }
+    
+    // Clean up
+    delete pendingMessageCallbacks[messageId];
+    
+    // Mark that we've established connection at least once
+    connectionEstablished = true;
+    connectionAttempts = 0;
   } catch (e) {
     // Local error in sending
-    console.error('[BRA] Error sending message:', e.message);
+    if (!e.message?.includes('Extension context invalidated')) {
+      console.error('[BRA] Error sending message:', e.message);
+    }
     
     // Call error callback
     if (errorCallback) {
       errorCallback(e);
-    }
-    
-    // Report error unless this is already a report error call
-    if (message.action !== 'detectionError') {
-      reportError(e, 'messageSend');
     }
   }
 }
@@ -305,14 +419,20 @@ function initializeDetection() {
   // Wait a bit to ensure the module is loaded
   setTimeout(() => {
     console.log('[BRA Content] Starting initial detection attempt');
+    console.log('[BRA Content] Document readyState:', document.readyState);
+    console.log('[BRA Content] Body exists:', !!document.body);
+    console.log('[BRA Content] Forms on page:', document.querySelectorAll('form').length);
+    
     // Strategy 1: Try at document_end (set in manifest)
     tryDetection();
     
     // Strategy 2: Wait for load event
     if (document.readyState === 'complete') {
+      console.log('[BRA Content] Document already complete, running detection again');
       tryDetection();
     } else {
       window.addEventListener('load', () => {
+        console.log('[BRA Content] Window load event fired');
         log('Window load event fired');
         tryDetection();
       });
@@ -320,6 +440,7 @@ function initializeDetection() {
     
     // Strategy 3: Delayed execution for slow-loading pages
     setTimeout(() => {
+      console.log('[BRA Content] Delayed execution triggered (2.5s)');
       log('Delayed execution triggered');
       tryDetection();
     }, 2500);
@@ -417,10 +538,23 @@ function setupMutationObserver() {
  * Try to detect business forms with retry mechanism
  */
 async function tryDetection() {
-  // Avoid redundant detections if we already have a result
-  if (detectionResult) {
-    log('Detection already completed, skipping');
+  console.log('[BRA] tryDetection() called');
+  
+  // Don't skip if called explicitly (allows re-detection on navigation)
+  // Only skip if we have a result AND haven't been asked to re-detect
+  if (detectionResult && !window.BRA_FORCE_REDETECTION) {
+    log('Detection already completed and no force flag, skipping');
     return;
+  }
+  
+  // Clear force flag
+  window.BRA_FORCE_REDETECTION = false;
+  
+  // Wait for modules to load
+  if (modulesLoadedPromise) {
+    console.log('[BRA] Waiting for modules to load...');
+    await modulesLoadedPromise;
+    console.log('[BRA] Modules loaded, proceeding with detection');
   }
   
   // Increment attempt counter
@@ -556,6 +690,10 @@ function showFallbackIndicator(message) {
  * Main detection function
  */
 async function detectBusinessForm() {
+  console.log('[BRA Content] ========== detectBusinessForm() STARTED ==========');
+  console.log('[BRA Content] URL:', window.location.href);
+  console.log('[BRA Content] URLDetector available:', !!URLDetector);
+  console.log('[BRA Content] FieldDetector available:', !!FieldDetector);
   log('Starting form detection');
   
   try {
@@ -564,6 +702,7 @@ async function detectBusinessForm() {
     
     // Make sure URLDetector is loaded
     if (!URLDetector) {
+      console.log('[BRA Content] URLDetector not loaded yet, retrying in 500ms');
       log('Waiting for URLDetector module to load...');
       // Wait a bit and try again
       setTimeout(tryDetection, 500);
@@ -735,28 +874,43 @@ async function detectBusinessForm() {
       
       // DC-specific bonus
       if (state === 'DC') {
+        console.log('[BRA Content] ========== DC-SPECIFIC DETECTION ==========');
+        console.log('[BRA Content] Current URL:', currentUrl);
+        
         // Check for DC-specific indicators
         const dcIndicators = [
+          currentUrl.includes('mytax.dc.gov'),
           currentUrl.includes('mybusiness.dc.gov'),
           currentUrl.includes('dlcp.dc.gov'),
           currentUrl.includes('dcra.dc.gov'),
           document.body.textContent.includes('District of Columbia'),
           document.body.textContent.includes('DCRA'),
-          document.body.textContent.includes('Clean Hands')
+          document.body.textContent.includes('Clean Hands'),
+          document.body.textContent.includes('DC Government'),
+          document.body.textContent.includes('FR-500')
         ];
         
+        console.log('[BRA Content] DC Indicators checked:');
+        dcIndicators.forEach((indicator, index) => {
+          console.log(`[BRA Content]   ${index}: ${indicator}`);
+        });
+        
         const dcMatches = dcIndicators.filter(Boolean).length;
+        console.log('[BRA Content] DC matches found:', dcMatches);
+        
         if (dcMatches >= 2) {
           confidenceDetails.stateIdentification = 15; // Max points for strong DC match
           log('[BRA] Strong DC indicators found:', dcMatches);
           
           // Additional bonus for DC business registration specific URLs
-          if (currentUrl.includes('mybusiness.dc.gov') || currentUrl.includes('dlcp.dc.gov')) {
+          if (currentUrl.includes('mytax.dc.gov') || currentUrl.includes('mybusiness.dc.gov') || currentUrl.includes('dlcp.dc.gov')) {
             confidenceDetails.domain += 5; // Extra domain bonus for known DC business sites
             confidenceDetails.businessTerminology += 5; // Implicit business context
-            log('[BRA] DC business registration site detected, adding bonus points');
+            console.log('[BRA Content] DC business registration site detected, adding bonus points');
+            console.log('[BRA Content] Domain bonus: +5, Business terminology bonus: +5');
           }
         }
+        console.log('[BRA Content] ============================================');
       }
     }
     
@@ -786,12 +940,13 @@ async function detectBusinessForm() {
     // This will be refined after field detection if available
     let isBusinessForm = confidenceScore >= 40 || adaptiveConfidence;
     
-    console.log('[BRA Content] Initial business form detection:', {
-      confidenceScore: confidenceScore,
-      threshold: 40,
-      adaptiveConfidence: adaptiveConfidence,
-      isBusinessForm: isBusinessForm
-    });
+    console.log('[BRA Content] ========== INITIAL DETECTION DECISION ==========');
+    console.log('[BRA Content] Confidence Score:', confidenceScore);
+    console.log('[BRA Content] Threshold:', 40);
+    console.log('[BRA Content] Adaptive Confidence:', adaptiveConfidence);
+    console.log('[BRA Content] Is Business Form:', isBusinessForm);
+    console.log('[BRA Content] URL:', currentUrl);
+    console.log('[BRA Content] ================================================');
     
     // State already detected above, no need to redeclare
     
@@ -961,11 +1116,15 @@ async function detectBusinessForm() {
       // 4. OR adaptive confidence from user feedback
       // 5. OR already detected as business form (don't downgrade)
       // 6. OR detected state with classified fields (strong signal)
+      // 7. OR DC mytax.dc.gov with form elements (special case for FR-500)
+      const isDCTaxSite = currentUrl.includes('mytax.dc.gov') && state === 'DC';
+      
       isBusinessForm = isBusinessForm || (
         confidenceScore >= 50 || 
         (hasStrongFieldDetection && hasBusinessFields) ||
         (hasGoodUrlScore && hasFormElements && detectedBusinessCategories.length >= 1) ||
         (state && classificationStats.classified >= 5) || // State + 5+ classified fields
+        (isDCTaxSite && hasFormElements) || // Special DC tax site detection
         adaptiveConfidence
       );
       
@@ -1019,7 +1178,14 @@ async function detectBusinessForm() {
     }
     
     // Store detection result globally
-    console.log('[BRA Content] Storing detection result globally');
+    console.log('[BRA Content] ========== FINAL DETECTION RESULT ==========');
+    console.log('[BRA Content] Is Business Form:', isBusinessForm);
+    console.log('[BRA Content] Final Confidence Score:', confidenceScore);
+    console.log('[BRA Content] State:', state);
+    console.log('[BRA Content] Form Type:', formType);
+    console.log('[BRA Content] Field Detection Available:', !!fieldDetectionResults);
+    console.log('[BRA Content] Fields Detected:', fieldDetectionResults?.fields?.length || 0);
+    console.log('[BRA Content] =============================================');
     
     // Create detection result with enhanced information
     detectionResult = {
@@ -1175,6 +1341,9 @@ function analyzePageContent() {
       'business registration', 'register a business', 'register your business',
       'business license', 'business permit', 'business filing',
       'new business', 'start a business', 'starting a business',
+      // DC-specific forms
+      'fr-500', 'fr500', 'combined business tax registration',
+      'business tax registration', 'register business', 'business entity',
       
       // Formation documents
       'articles of organization', 'articles of incorporation', 'articles of formation',
@@ -1199,7 +1368,15 @@ function analyzePageContent() {
       'file a', 'submit a', 'apply for', 'application for', 
       'form a', 'create a', 'establish a', 'organize a',
       'registration form', 'filing fee', 'filing period', 'filing requirements',
-      'submit online', 'file online', 'electronic filing', 'e-file'
+      'submit online', 'file online', 'electronic filing', 'e-file',
+      
+      // Special event and vendor registration terms
+      'special event registration', 'event permit', 'vendor registration',
+      'temporary business', 'special event license', 'vendor permit',
+      'festival vendor', 'market vendor', 'fair vendor', 'event vendor',
+      'temporary permit', 'one-time permit', 'short-term permit',
+      'booth registration', 'vendor application', 'exhibitor registration',
+      'special event application', 'temporary vendor', 'mobile vendor'
     ];
     
     // Check for registration terms - with proximity bonus
@@ -1267,7 +1444,11 @@ function analyzePageContent() {
         // Tax registration patterns
         { pattern: /tax.{0,10}registration/i, points: 10 },
         { pattern: /employer.{0,10}identification/i, points: 10 },
-        { pattern: /business.{0,10}tax/i, points: 10 }
+        { pattern: /business.{0,10}tax/i, points: 10 },
+        
+        // DC-specific form patterns
+        { pattern: /fr.?500/i, points: 20 },
+        { pattern: /combined.{0,10}business.{0,10}tax/i, points: 15 }
       ];
       
       // Check heading text against patterns
@@ -1329,6 +1510,10 @@ async function analyzeFormElements() {
     let fieldDetectionResults = null;
     let classificationStats = null;
     
+    console.log('[BRA Content] ========== FIELD DETECTION ANALYSIS ==========');
+    console.log('[BRA Content] FieldDetector module available:', !!FieldDetector);
+    console.log('[BRA Content] FieldDetector.default available:', !!(FieldDetector && FieldDetector.default));
+    
     if (FieldDetector && FieldDetector.default) {
       try {
         log('Using FieldDetector module to analyze form fields');
@@ -1336,6 +1521,7 @@ async function analyzeFormElements() {
         // Get state from URL if available
         const currentUrl = window.location.href;
         const state = URLDetector?.default?.identifyStateFromUrl(currentUrl) || null;
+        console.log('[BRA Content] State from URL:', state);
         
         // Create a field detector instance with state context
         const detector = new FieldDetector.default(document, { 
@@ -1439,6 +1625,15 @@ async function analyzeFormElements() {
     // Look for forms and interactive elements
     const forms = document.querySelectorAll('form');
     const formCount = forms.length;
+    
+    console.log('[BRA Content] ========== FORM ELEMENT ANALYSIS ==========');
+    console.log('[BRA Content] Forms found:', formCount);
+    console.log('[BRA Content] All inputs/selects/textareas:', document.querySelectorAll('input, select, textarea').length);
+    console.log('[BRA Content] Text inputs:', document.querySelectorAll('input[type="text"]').length);
+    console.log('[BRA Content] Select elements:', document.querySelectorAll('select').length);
+    console.log('[BRA Content] Submit buttons:', document.querySelectorAll('button[type="submit"], input[type="submit"]').length);
+    console.log('[BRA Content] Iframes on page:', document.querySelectorAll('iframe').length);
+    console.log('[BRA Content] Is this page in an iframe?:', window !== window.top);
     
     // Store diagnostic information
     diagnosticInfo.formCount = formCount;
@@ -1766,10 +1961,55 @@ function updateDetectionHistory(feedbackData) {
   }
 }
 
+// Add context invalidation listener
+if (typeof window !== 'undefined') {
+  window.addEventListener('extension-context-invalidated', () => {
+    console.log('[BRA] Extension context invalidated event received');
+    // Clean up any active operations
+    detectionResult = null;
+    pendingMessageCallbacks = {};
+  });
+}
+
 // Listen for messages from popup, panel, or background script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // Check if context is still valid before processing
+  const messaging = messagingUtils || window.messagingUtils;
+  let contextValid = true;
+  
+  if (messaging && typeof messaging.isContextValid === 'function') {
+    contextValid = messaging.isContextValid();
+  } else {
+    try {
+      contextValid = !!(chrome.runtime && chrome.runtime.id);
+    } catch (e) {
+      contextValid = false;
+    }
+  }
+  
+  if (!contextValid) {
+    console.log('[BRA] Ignoring message - extension context invalid');
+    return false;
+  }
+  
   console.log('[BRA Content] Message received:', message.action, 'Detection result exists:', !!detectionResult);
   log('Message received:', message.action);
+  
+  // Special handling for navigation detection request
+  if (message.action === 'checkNavigation') {
+    // Force check current URL against stored result
+    const currentUrl = location.href;
+    if (detectionResult && detectionResult.url !== currentUrl) {
+      console.log('[BRA] URL mismatch detected - triggering new detection');
+      handleUrlChange();
+    }
+    sendResponse({ 
+      currentUrl: currentUrl,
+      resultUrl: detectionResult?.url,
+      needsUpdate: !detectionResult || detectionResult.url !== currentUrl
+    });
+    return true;
+  }
   
   try {
     // Mark that we have a connection
@@ -2096,10 +2336,340 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 // Initialize when the content script loads
+console.log('[BRA] ===== CONTENT SCRIPT STARTING =====');
+console.log('[BRA] URL:', window.location.href);
+console.log('[BRA] Document ready state:', document.readyState);
+console.log('[BRA] Time:', new Date().toISOString());
+
 initializeDetection();
 
 // Log initialization complete (always show this)
 console.log('[BRA] Business Registration Assistant initialized on:', window.location.href);
+console.log('[BRA] ===== CONTENT SCRIPT INITIALIZED =====');
+
+// Immediate detection test
+setTimeout(() => {
+  console.log('[BRA] ===== IMMEDIATE DETECTION TEST =====');
+  console.log('[BRA] Forms found:', document.querySelectorAll('form').length);
+  console.log('[BRA] Inputs found:', document.querySelectorAll('input').length);
+  console.log('[BRA] Radio buttons found:', document.querySelectorAll('input[type="radio"]').length);
+  console.log('[BRA] Select elements found:', document.querySelectorAll('select').length);
+  console.log('[BRA] Page title:', document.title);
+  console.log('[BRA] Page contains "FR-500":', document.body?.textContent?.includes('FR-500'));
+  console.log('[BRA] Page contains "Business Registration":', document.body?.textContent?.includes('Business Registration'));
+  console.log('[BRA] =====================================');
+}, 1000);
+
+// Listen for URL changes (including hash changes)
+let lastUrl = location.href;
+let lastPageTitle = document.title;
+let lastFormCount = document.querySelectorAll('form').length;
+let lastInputCount = document.querySelectorAll('input, select, textarea').length;
+
+// Function to handle URL changes
+function handleUrlChange() {
+  const currentUrl = location.href;
+  if (currentUrl !== lastUrl) {
+    const oldUrl = lastUrl;
+    lastUrl = currentUrl;
+    console.log('[BRA] URL changed from:', oldUrl, 'to:', currentUrl);
+    
+    // Check if it's just a hash change
+    const isHashChange = oldUrl.split('#')[0] === currentUrl.split('#')[0];
+    console.log('[BRA] Is hash change:', isHashChange);
+    
+    // Reset detection state
+    detectionResult = null;
+    detectionAttempts = 0;
+    fallbackDetectionMode = false;
+    window.BRA_FORCE_REDETECTION = true;
+    
+    // Clear any existing errors
+    if (window.BRA_Errors) {
+      window.BRA_Errors = [];
+    }
+    
+    // Immediately notify panel to clear fields using safe messaging
+    const messaging = messagingUtils || window.messagingUtils;
+    
+    // Check if context is valid
+    let contextValid = true;
+    if (messaging && typeof messaging.isContextValid === 'function') {
+      contextValid = messaging.isContextValid();
+    } else {
+      try {
+        contextValid = !!(chrome.runtime && chrome.runtime.id);
+      } catch (e) {
+        contextValid = false;
+      }
+    }
+    
+    if (contextValid) {
+      // Send navigation message
+      if (messaging && typeof messaging.sendMessage === 'function') {
+        messaging.sendMessage({
+          action: 'navigationDetected',
+          oldUrl: oldUrl,
+          newUrl: currentUrl,
+          isHashChange: isHashChange,
+          timestamp: Date.now()
+        });
+        
+        // Notify background of URL change
+        messaging.sendMessage({
+          action: 'urlChanged',
+          newUrl: currentUrl,
+          timestamp: Date.now()
+        });
+      } else {
+        // Fallback to direct Chrome API
+        try {
+          chrome.runtime.sendMessage({
+            action: 'navigationDetected',
+            oldUrl: oldUrl,
+            newUrl: currentUrl,
+            isHashChange: isHashChange,
+            timestamp: Date.now()
+          });
+          
+          chrome.runtime.sendMessage({
+            action: 'urlChanged',
+            newUrl: currentUrl,
+            timestamp: Date.now()
+          });
+        } catch (error) {
+          console.warn('[BRA] Failed to send navigation message:', error);
+        }
+      }
+    }
+    
+    // For hash changes or form navigation, wait longer for content to load
+    const detectionDelay = isHashChange ? 1500 : 500;
+    
+    // Trigger new detection after a delay
+    setTimeout(() => {
+      console.log('[BRA] Starting detection for new URL after', detectionDelay, 'ms delay');
+      tryDetection();
+    }, detectionDelay);
+  }
+}
+
+// Debounced content change handler
+let contentChangeTimer = null;
+let lastContentHash = '';
+
+function getContentHash() {
+  // Create a simple hash of form-related content
+  const forms = document.querySelectorAll('form');
+  const inputs = document.querySelectorAll('input, select, textarea');
+  return `${forms.length}-${inputs.length}-${document.body?.innerHTML?.length || 0}`;
+}
+
+function handleContentChange() {
+  const currentHash = getContentHash();
+  if (currentHash !== lastContentHash) {
+    lastContentHash = currentHash;
+    console.log('[BRA] Significant content change detected');
+    
+    // Reset detection state
+    detectionResult = null;
+    detectionAttempts = 0;
+    window.BRA_FORCE_REDETECTION = true;
+    
+    // Notify panel of content change
+    chrome.runtime.sendMessage({
+      action: 'contentChanged',
+      timestamp: Date.now()
+    }, function(response) {
+      if (chrome.runtime.lastError) {
+        // Ignore - panel might not be open
+      }
+    });
+    
+    // Trigger new detection
+    tryDetection();
+  }
+}
+
+// Listen for hash changes
+window.addEventListener('hashchange', handleUrlChange);
+
+// Listen for history changes (back/forward navigation)
+window.addEventListener('popstate', handleUrlChange);
+
+// Override pushState and replaceState to catch programmatic navigation
+const originalPushState = history.pushState;
+const originalReplaceState = history.replaceState;
+
+history.pushState = function() {
+  originalPushState.apply(history, arguments);
+  setTimeout(handleUrlChange, 0);
+};
+
+history.replaceState = function() {
+  originalReplaceState.apply(history, arguments);
+  setTimeout(handleUrlChange, 0);
+};
+
+// Enhanced MutationObserver for both URL and content changes
+const pageObserver = new MutationObserver((mutations) => {
+  // Check for URL change first
+  if (location.href !== lastUrl) {
+    handleUrlChange();
+    return;
+  }
+  
+  // Check for significant content changes (debounced)
+  clearTimeout(contentChangeTimer);
+  contentChangeTimer = setTimeout(() => {
+    // Check multiple indicators of significant form changes
+    let hasSignificantChanges = false;
+    
+    // 1. Check if form-related elements were added or removed
+    for (const mutation of mutations) {
+      // Check added nodes
+      for (const node of mutation.addedNodes) {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          const elem = node;
+          if (elem.matches && (
+            elem.matches('form, input, select, textarea, fieldset, label, button[type="submit"]') ||
+            elem.querySelector && elem.querySelector('form, input, select, textarea, fieldset, label, button[type="submit"]')
+          )) {
+            hasSignificantChanges = true;
+            break;
+          }
+        }
+      }
+      
+      // Check removed nodes (form might have been replaced)
+      for (const node of mutation.removedNodes) {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          const elem = node;
+          if (elem.matches && elem.matches('form, fieldset')) {
+            hasSignificantChanges = true;
+            break;
+          }
+        }
+      }
+      
+      if (hasSignificantChanges) break;
+    }
+    
+    // 2. Check if the page title changed (often indicates navigation)
+    if (document.title !== lastPageTitle) {
+      console.log('[BRA] Page title changed from:', lastPageTitle, 'to:', document.title);
+      lastPageTitle = document.title;
+      hasSignificantChanges = true;
+    }
+    
+    // 3. Check if main content containers changed significantly
+    const currentFormCount = document.querySelectorAll('form').length;
+    const currentInputCount = document.querySelectorAll('input, select, textarea').length;
+    
+    if (Math.abs(currentFormCount - lastFormCount) > 0 || Math.abs(currentInputCount - lastInputCount) > 5) {
+      console.log('[BRA] Significant form element count change detected');
+      lastFormCount = currentFormCount;
+      lastInputCount = currentInputCount;
+      hasSignificantChanges = true;
+    }
+    
+    if (hasSignificantChanges) {
+      handleContentChange();
+    }
+  }, 800); // Slightly faster response time for better UX
+});
+
+// Start observing the document for changes
+if (document.body) {
+  pageObserver.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: false, // Don't watch attribute changes to reduce noise
+    characterData: false
+  });
+  
+  // Set initial content hash
+  lastContentHash = getContentHash();
+}
+
+// Monitor checkbox changes for conditional field detection
+let checkboxChangeTimer = null;
+function setupCheckboxMonitoring() {
+  // Use event delegation to catch all checkbox changes
+  document.addEventListener('change', function(event) {
+    const target = event.target;
+    
+    // Check if it's a checkbox or radio button
+    if (target && (target.type === 'checkbox' || target.type === 'radio')) {
+      console.log('[BRA] Form control changed:', target.type, target.name || target.id);
+      
+      // Clear any pending timer
+      clearTimeout(checkboxChangeTimer);
+      
+      // Wait a bit for any conditional fields to appear/disappear
+      checkboxChangeTimer = setTimeout(() => {
+        console.log('[BRA] Checking for conditional field changes after checkbox/radio change');
+        
+        // Check if form structure has changed
+        const currentFormCount = document.querySelectorAll('form').length;
+        const currentInputCount = document.querySelectorAll('input:not([type="hidden"]), select, textarea').length;
+        const visibleInputCount = Array.from(document.querySelectorAll('input:not([type="hidden"]), select, textarea'))
+          .filter(el => {
+            const style = window.getComputedStyle(el);
+            return style.display !== 'none' && style.visibility !== 'hidden';
+          }).length;
+        
+        console.log(`[BRA] Current visible inputs: ${visibleInputCount}, Last count: ${lastInputCount}`);
+        
+        // If field count changed significantly, re-detect
+        if (Math.abs(visibleInputCount - lastInputCount) > 0) {
+          console.log('[BRA] Field count changed after checkbox/radio change, re-detecting...');
+          lastInputCount = visibleInputCount;
+          
+          // Reset detection and trigger new one
+          detectionResult = null;
+          window.BRA_FORCE_REDETECTION = true;
+          
+          // Notify panel of potential field change
+          chrome.runtime.sendMessage({
+            action: 'conditionalFieldsChanged',
+            timestamp: Date.now()
+          }, function(response) {
+            if (chrome.runtime.lastError) {
+              // Ignore - panel might not be open
+            }
+          });
+          
+          tryDetection();
+        }
+      }, 500); // Wait 500ms for animations/transitions
+    }
+  }, true); // Use capture phase to catch events before they might be stopped
+}
+
+// Set up checkbox monitoring when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', setupCheckboxMonitoring);
+} else {
+  setupCheckboxMonitoring();
+}
+
+// Announce content script presence to background/panel
+try {
+  chrome.runtime.sendMessage({
+    action: 'contentScriptReady',
+    url: window.location.href,
+    timestamp: Date.now()
+  }, function(response) {
+    if (chrome.runtime.lastError) {
+      console.log('[BRA] Could not announce presence:', chrome.runtime.lastError.message);
+    } else {
+      console.log('[BRA] Content script presence announced');
+    }
+  });
+} catch (error) {
+  console.log('[BRA] Error announcing presence:', error);
+}
 
 // Health check system
 function performHealthCheck() {
@@ -2128,14 +2698,40 @@ function performHealthCheck() {
 window.BRA_DEBUG = {
   getDetectionResult: () => detectionResult,
   getHealth: () => performHealthCheck(),
-  triggerDetection: () => tryDetection(),
+  triggerDetection: () => {
+    console.log('[BRA DEBUG] Manual detection triggered');
+    detectionResult = null;
+    detectionAttempts = 0;
+    window.BRA_FORCE_REDETECTION = true;
+    return tryDetection();
+  },
+  forceDetection: async () => {
+    console.log('[BRA DEBUG] Force detection triggered');
+    detectionResult = null;
+    detectionAttempts = 0;
+    window.BRA_FORCE_REDETECTION = true;
+    await detectBusinessForm();
+    return detectionResult;
+  },
   getState: () => ({
     detectionResult,
     detectionAttempts,
     connectionEstablished,
     fallbackDetectionMode,
-    errors: window.BRA_Errors
-  })
+    errors: window.BRA_Errors,
+    modules: {
+      URLDetector: !!URLDetector,
+      FieldDetector: !!FieldDetector
+    }
+  }),
+  testFieldDetection: async () => {
+    console.log('[BRA DEBUG] Testing field detection');
+    const detector = new (FieldDetector.default || FieldDetector.FieldDetector)(document);
+    const fields = await detector.detectFields();
+    console.log('[BRA DEBUG] Fields detected:', fields.length);
+    console.log('[BRA DEBUG] Fields:', fields);
+    return fields;
+  }
 };
 
 console.log('[BRA Content] Debug helper available: window.BRA_DEBUG');

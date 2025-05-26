@@ -3,6 +3,81 @@
  * Main script for the sidebar panel UI
  */
 
+// Import messaging utilities
+let messagingUtils = null;
+(async function loadMessagingUtils() {
+  try {
+    const messagingUtilsURL = chrome.runtime.getURL('modules/messagingUtils.js');
+    const module = await import(messagingUtilsURL);
+    messagingUtils = module.default || module.messagingUtils || module;
+    console.log('[BRA Panel] MessagingUtils loaded');
+  } catch (error) {
+    console.error('[BRA Panel] Failed to load messaging utils:', error);
+    // Create fallback
+    messagingUtils = {
+      isContextValid: () => {
+        try {
+          return chrome.runtime && chrome.runtime.id;
+        } catch (e) {
+          return false;
+        }
+      },
+      sendMessage: async (message) => {
+        try {
+          return await chrome.runtime.sendMessage(message);
+        } catch (error) {
+          console.error('[BRA Panel] Message error:', error);
+          return null;
+        }
+      },
+      sendMessageToTab: async (tabId, message) => {
+        try {
+          return await chrome.tabs.sendMessage(tabId, message);
+        } catch (error) {
+          console.error('[BRA Panel] Tab message error:', error);
+          return null;
+        }
+      }
+    };
+  }
+})();
+
+// Track tabs that have confirmed content script presence
+const contentScriptTabs = new Set();
+
+// URL patterns where content scripts are injected (from manifest.json)
+const CONTENT_SCRIPT_PATTERNS = [
+  /^https?:\/\/[^\/]*\.gov\//,
+  /^https?:\/\/[^\/]*\.state\.us\//,
+  /^https?:\/\/[^\/]*\.ca\.gov\//,
+  /^https?:\/\/[^\/]*\.ny\.gov\//,
+  /^https?:\/\/[^\/]*\.tx\.gov\//,
+  /^https?:\/\/[^\/]*\.fl\.gov\//,
+  /^https?:\/\/[^\/]*\.de\.gov\//,
+  /^https?:\/\/mytax\.dc\.gov\//,
+  /^https?:\/\/[^\/]*\.mytax\.dc\.gov\//,
+  /^https?:\/\/[^\/]*\.business\.ca\.gov\//,
+  /^https?:\/\/[^\/]*\.businessexpress\.ny\.gov\//,
+  /^https?:\/\/[^\/]*\.efile\.sunbiz\.org\//,
+  /^https?:\/\/[^\/]*\.dos\.myflorida\.com\//,
+  /^https?:\/\/sos\.state\.us\//,
+  /^https?:\/\/[^\/]*\.sos\.state\.us\//,
+  /^https?:\/\/[^\/]*\.tax\.gov\//,
+  /^https?:\/\/tax\.ny\.gov\//,
+  /^https?:\/\/tax\.ca\.gov\//,
+  /^https?:\/\/tax\.fl\.gov\//,
+  /^https?:\/\/tax\.dc\.gov\//,
+  /^https?:\/\/[^\/]*\.revenue\.gov\//,
+  /^https?:\/\/revenue\.state\.us\//,
+  /^https?:\/\/[^\/]*\.sunbiz\.org\//
+];
+
+// Check if a URL matches our content script patterns
+function isValidContentScriptUrl(url) {
+  if (!url) return false;
+  return CONTENT_SCRIPT_PATTERNS.some(pattern => pattern.test(url));
+}
+
 // DOM elements - Navigation
 const endeavorsButton = document.getElementById('endeavors-button');
 const userButton = document.getElementById('user-button');
@@ -106,11 +181,177 @@ function hideError() {
   }
 }
 
+// Add context invalidation listener
+if (typeof window !== 'undefined') {
+  window.addEventListener('extension-context-invalidated', () => {
+    console.log('[BRA Panel] Extension context invalidated event received');
+    // Clean up UI
+    showNoDetection();
+    hideError();
+  });
+}
+
 // Listen for detection updates from background
 chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
+  // Check context validity
+  let contextValid = true;
+  if (messagingUtils && typeof messagingUtils.isContextValid === 'function') {
+    contextValid = messagingUtils.isContextValid();
+  } else {
+    try {
+      contextValid = !!(chrome.runtime && chrome.runtime.id);
+    } catch (e) {
+      contextValid = false;
+    }
+  }
+  
+  if (!contextValid) {
+    console.log('[BRA Panel] Ignoring message - extension context invalid');
+    return false;
+  }
+  
   console.log('[BRA Panel] ===== MESSAGE RECEIVED =====');
   console.log('[BRA Panel] Full message:', JSON.stringify(message));
   console.log('[BRA Panel] Message type/action:', message.action || message.type || 'unknown');
+  
+  // Handle content script handshake
+  if (message.action === 'contentScriptReady') {
+    // This comes from background script forwarding
+    if (message.tabId) {
+      console.log('[BRA Panel] Content script ready on tab:', message.tabId, 'URL:', message.url);
+      contentScriptTabs.add(message.tabId);
+      
+      // If this is the current tab, trigger detection
+      if (message.tabId === currentTabId) {
+        console.log('[BRA Panel] Content script ready on current tab, getting detection result');
+        setTimeout(() => getDetectionResult(message.tabId), 500);
+      }
+    }
+    // Direct from content script (shouldn't happen but handle it)
+    else if (sender && sender.tab) {
+      console.log('[BRA Panel] Content script ready on tab:', sender.tab.id);
+      contentScriptTabs.add(sender.tab.id);
+    }
+    
+    // Acknowledge the handshake
+    if (sendResponse) {
+      sendResponse({acknowledged: true});
+    }
+    return true;
+  }
+  
+  // Handle navigation detection (immediate clear)
+  if (message.action === 'navigationDetected') {
+    console.log('[BRA Panel] Navigation detected:', message);
+    
+    // Get the tab ID from message or sender
+    const tabId = message.tabId || sender?.tab?.id;
+    
+    // If this is the current tab, immediately clear fields
+    if (tabId === currentTabId) {
+      console.log('[BRA Panel] Navigation on current tab - clearing fields immediately');
+      
+      // Clear all fields and data immediately
+      showNoDetection();
+      hideError();
+      
+      // Update status to detecting
+      if (confidenceText) {
+        confidenceText.textContent = 'Detecting new form...';
+      }
+      
+      // Don't wait for new detection here - content script will notify us
+    }
+    
+    return true;
+  }
+  
+  // Handle URL change notification
+  if (message.action === 'urlChanged') {
+    console.log('[BRA Panel] URL changed for tab:', message.tabId, 'New URL:', message.newUrl);
+    
+    // If this is the current tab, refresh detection
+    if (message.tabId === currentTabId) {
+      console.log('[BRA Panel] URL changed on current tab, refreshing detection');
+      
+      // Clear any existing data
+      showNoDetection();
+      hideError();
+      
+      // Update status to detecting
+      if (confidenceText) {
+        confidenceText.textContent = 'Detecting...';
+      }
+      
+      // Small delay to let content script initialize
+      setTimeout(() => {
+        getDetectionResult(message.tabId);
+      }, 1000);
+    }
+    
+    if (sendResponse) {
+      sendResponse({acknowledged: true});
+    }
+    return true;
+  }
+  
+  // Handle content change notification
+  if (message.action === 'contentChanged') {
+    console.log('[BRA Panel] Content changed for tab:', message.tabId || sender?.tab?.id);
+    
+    const tabId = message.tabId || sender?.tab?.id;
+    
+    // If this is the current tab, refresh detection
+    if (tabId === currentTabId) {
+      console.log('[BRA Panel] Content changed on current tab, refreshing detection');
+      
+      // Clear any existing data immediately
+      showNoDetection();
+      hideError();
+      
+      // Update status to detecting
+      if (confidenceText) {
+        confidenceText.textContent = 'Detecting...';
+      }
+      
+      // Longer delay for content changes to ensure DOM is stable
+      setTimeout(() => {
+        getDetectionResult(tabId);
+      }, 1500);
+    }
+    
+    if (sendResponse) {
+      sendResponse({acknowledged: true});
+    }
+    return true;
+  }
+  
+  // Handle conditional fields change notification
+  if (message.action === 'conditionalFieldsChanged') {
+    console.log('[BRA Panel] Conditional fields changed');
+    
+    const tabId = message.tabId || sender?.tab?.id;
+    
+    // If this is the current tab, update detection quickly
+    if (tabId === currentTabId) {
+      console.log('[BRA Panel] Conditional fields changed on current tab, updating...');
+      
+      // Update status to show we're updating
+      if (confidenceText) {
+        confidenceText.textContent = 'Updating fields...';
+      }
+      
+      // Get updated detection quickly
+      setTimeout(() => {
+        getDetectionResult(tabId);
+      }, 700);
+    }
+    
+    if (sendResponse) {
+      sendResponse({acknowledged: true});
+    }
+    return true;
+  }
   
   if (message.action === 'detectionUpdated') {
     console.log('[BRA Panel] ===== DETECTION UPDATED =====');
@@ -176,21 +417,90 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     }, 3000); // 3 second timeout
     
+    // Function to handle tab changes and refresh detection
+    function refreshDetectionForTab(tabId) {
+      console.log('[BRA Panel] Refreshing detection for tab:', tabId);
+      currentTabId = tabId;
+      
+      // Clear any existing errors
+      hideError();
+      
+      // Reset last update to allow immediate refresh
+      lastUpdateTime = 0;
+      lastUpdateResult = null;
+      currentDetectionResult = null;
+      
+      // Clear fields display IMMEDIATELY to prevent stale data
+      updateFieldsDisplay(null);
+      // Extra safety - force clear the fields list
+      if (fieldsList) {
+        fieldsList.innerHTML = '<div class="no-fields-message">No fields detected yet</div>';
+      }
+      
+      // Get tab info to check URL
+      chrome.tabs.get(tabId, function(tab) {
+        if (chrome.runtime.lastError) {
+          console.error('[BRA Panel] Error getting tab info:', JSON.stringify(chrome.runtime.lastError));
+          showNoDetection();
+          return;
+        }
+        
+        // Check if URL matches our content script patterns
+        if (!isValidContentScriptUrl(tab.url)) {
+          console.log('[BRA Panel] Tab URL not supported:', tab.url);
+          // Show appropriate message for non-government sites
+          if (confidenceText) {
+            confidenceText.textContent = 'Not a government site';
+          }
+          showNoDetection();
+          // Clear from content script tracking
+          contentScriptTabs.delete(tabId);
+          return;
+        }
+        
+        // Set detecting state for valid URLs
+        if (confidenceText) {
+          confidenceText.textContent = 'Detecting...';
+        }
+        
+        // Get detection for the tab
+        getDetectionResult(tabId);
+      });
+    }
+    
     // Get current tab
     chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
       console.log('[BRA Panel] Initial tabs query result:', tabs);
       if (tabs && tabs[0]) {
         console.log('[BRA Panel] Initial tab ID:', tabs[0].id, 'URL:', tabs[0].url);
-        currentTabId = tabs[0].id; // Store current tab ID
-        console.log('[BRA Panel] Calling getDetectionResult for tab:', tabs[0].id);
-        // Get detection for current tab
-        getDetectionResult(tabs[0].id);
+        refreshDetectionForTab(tabs[0].id);
       } else {
         console.log('[BRA Panel] No tabs found on initial load');
         // Clear "Detecting..." if no tabs
         if (confidenceText) {
           confidenceText.textContent = 'No form detected';
         }
+      }
+    });
+    
+    // Listen for tab activation changes
+    chrome.tabs.onActivated.addListener(function(activeInfo) {
+      console.log('[BRA Panel] Tab activated:', activeInfo.tabId);
+      // Clear content script tracking for previous tab if it's not a government site
+      if (currentTabId && currentTabId !== activeInfo.tabId) {
+        contentScriptTabs.delete(currentTabId);
+      }
+      refreshDetectionForTab(activeInfo.tabId);
+    });
+    
+    // Listen for tab URL changes (navigation)
+    chrome.tabs.onUpdated.addListener(function(tabId, changeInfo, tab) {
+      // Only respond to complete navigation and if it's the current tab
+      if (changeInfo.status === 'complete' && tabId === currentTabId) {
+        console.log('[BRA Panel] Tab updated (navigation complete):', tabId, tab.url);
+        // Clear content script tracking as page has navigated
+        contentScriptTabs.delete(tabId);
+        refreshDetectionForTab(tabId);
       }
     });
     
@@ -212,7 +522,15 @@ document.addEventListener('DOMContentLoaded', function() {
             return; // No active tab
           }
           
-          const tabId = tabs[0].id;
+          const tab = tabs[0];
+          const tabId = tab.id;
+          
+          // Check if URL is valid for content script
+          if (!isValidContentScriptUrl(tab.url)) {
+            console.log('[BRA Panel] Skipping detection check for non-government URL:', tab.url);
+            detectionInProgress = false;
+            return;
+          }
           
           // Mark detection as in progress
           detectionInProgress = true;
@@ -226,6 +544,10 @@ document.addEventListener('DOMContentLoaded', function() {
             if (response && response.hasResult && response.result) {
               console.log('[BRA Panel] Detection result available');
               updateUI(response.result);
+              // Clear any errors if form was detected
+              if (response.result.isBusinessRegistrationForm) {
+                hideError();
+              }
               detectionInProgress = false;
               return;
             }
@@ -250,8 +572,8 @@ document.addEventListener('DOMContentLoaded', function() {
       // Don't immediately check - let the initial getDetectionResult complete first
       // checkForForms();
       
-      // Set up periodic automatic detection - start after initial delay
-      detectionInterval = setInterval(checkForForms, 5000);
+      // Set up periodic automatic detection - check every 2-3 seconds as requested
+      detectionInterval = setInterval(checkForForms, 2500); // 2.5 seconds
       
       // Clean up interval when panel is closed
       window.addEventListener('unload', function() {
@@ -343,7 +665,7 @@ function getDetectionResult(tabId) {
       tabId: tabId
     }, function(response) {
       if (chrome.runtime.lastError) {
-        console.error('[BRA Panel] Error getting detection result:', chrome.runtime.lastError);
+        console.error('[BRA Panel] Error getting detection result:', JSON.stringify(chrome.runtime.lastError, null, 2));
         showError('Error getting detection result: ' + chrome.runtime.lastError.message);
         return;
       }
@@ -354,7 +676,10 @@ function getDetectionResult(tabId) {
         console.log('[BRA Panel] Detection result:', response.result);
         // Show detection result
         updateUI(response.result);
-        hideError();
+        // Clear errors if we have a valid business form
+        if (response.result.isBusinessRegistrationForm) {
+          hideError();
+        }
       } else if (response && response.hasErrors && response.errors) {
         console.log('[BRA Panel] Has errors:', response.errors);
         // Show formatted error with troubleshooting tips
@@ -395,7 +720,7 @@ function getDetectionResult(tabId) {
             action: 'triggerDetection'
           }, function(response) {
             if (chrome.runtime.lastError) {
-              console.error('[BRA Panel] Error triggering detection:', chrome.runtime.lastError);
+              console.error('[BRA Panel] Error triggering detection:', JSON.stringify(chrome.runtime.lastError, null, 2));
               
               // If content script not ready, wait and retry
               if (chrome.runtime.lastError.message.includes('receiving end does not exist')) {
@@ -443,45 +768,127 @@ function getDetectionResult(tabId) {
 }
 
 // Connection retry logic with exponential backoff
-function sendMessageWithRetry(tabId, message, onSuccess, onError, retryCount = 0) {
+async function sendMessageWithRetry(tabId, message, onSuccess, onError, retryCount = 0) {
   const MAX_RETRIES = 3;
   const RETRY_DELAYS = [100, 500, 1500]; // Exponential backoff
   
-  chrome.tabs.sendMessage(tabId, message, function(response) {
-    if (chrome.runtime.lastError) {
-      const error = chrome.runtime.lastError;
-      
-      // Check if we should retry
-      if (retryCount < MAX_RETRIES && error.message.includes('receiving end does not exist')) {
-        // Retry after delay
-        setTimeout(function() {
-          sendMessageWithRetry(tabId, message, onSuccess, onError, retryCount + 1);
-        }, RETRY_DELAYS[retryCount]);
-      } else {
-        // All retries exhausted or non-recoverable error
-        if (onError) onError(error);
-      }
-    } else {
-      // Success
-      if (onSuccess) onSuccess(response);
+  // Check context validity first
+  let contextValid = true;
+  if (messagingUtils && typeof messagingUtils.isContextValid === 'function') {
+    contextValid = messagingUtils.isContextValid();
+  } else {
+    try {
+      contextValid = !!(chrome.runtime && chrome.runtime.id);
+    } catch (e) {
+      contextValid = false;
     }
-  });
+  }
+  
+  if (!contextValid) {
+    console.log('[BRA Panel] Extension context invalid, not sending message');
+    if (onError) onError(new Error('Extension context invalidated'));
+    return;
+  }
+  
+  let response = null;
+  if (messagingUtils && typeof messagingUtils.sendMessageToTab === 'function') {
+    response = await messagingUtils.sendMessageToTab(tabId, message);
+  } else {
+    // Fallback to direct Chrome API
+    response = await new Promise((resolve) => {
+      chrome.tabs.sendMessage(tabId, message, (resp) => {
+        if (chrome.runtime.lastError) {
+          resolve(null);
+        } else {
+          resolve(resp);
+        }
+      });
+    });
+  }
+  
+  if (response === null) {
+    const error = chrome.runtime.lastError || new Error('Message send failed');
+    
+    // Check if it's a context invalidation error - don't retry
+    if (error.message?.includes('Extension context invalidated') || 
+        error.message?.includes('Could not establish connection') ||
+        error.message?.includes('The message port closed')) {
+      if (onError) onError(error);
+      return;
+    }
+    
+    // Check if we should retry for other errors
+    if (retryCount < MAX_RETRIES && error.message?.includes('receiving end does not exist')) {
+      // Retry after delay
+      setTimeout(function() {
+        sendMessageWithRetry(tabId, message, onSuccess, onError, retryCount + 1);
+      }, RETRY_DELAYS[retryCount]);
+    } else {
+      // All retries exhausted or non-recoverable error
+      if (onError) onError(error);
+    }
+  } else {
+    // Success
+    if (onSuccess) onSuccess(response);
+  }
 }
 let currentTabId = null;
 let autoRetryTimer = null;
 
 // Ask content script for results if background doesn't have them
-function askContentScript(tabId) {
+async function askContentScript(tabId) {
   try {
     currentTabId = tabId;
     console.log('[BRA Panel] Asking content script directly for tab:', tabId);
     
-    // Ask content script directly for its current detection result
-    chrome.tabs.sendMessage(tabId, {
-      action: 'getDetectionStatus'
-    }, function(response) {
+    // Check if messaging is available and context is valid
+    let contextValid = true;
+    if (messagingUtils && typeof messagingUtils.isContextValid === 'function') {
+      contextValid = messagingUtils.isContextValid();
+    } else {
+      try {
+        contextValid = !!(chrome.runtime && chrome.runtime.id);
+      } catch (e) {
+        contextValid = false;
+      }
+    }
+    
+    if (!contextValid) {
+      console.log('[BRA Panel] Extension context invalid, not asking content script');
+      showNoDetection();
+      return;
+    }
+    
+    // First check if we should even try to contact the content script
+    chrome.tabs.get(tabId, async function(tab) {
       if (chrome.runtime.lastError) {
-        console.error('[BRA Panel] Error asking content script:', chrome.runtime.lastError);
+        if (!chrome.runtime.lastError.message?.includes('Extension context invalidated')) {
+          console.error('[BRA Panel] Error getting tab for content script check:', JSON.stringify(chrome.runtime.lastError));
+        }
+        showNoDetection();
+        return;
+      }
+      
+      // Check if URL is valid for content script
+      if (!isValidContentScriptUrl(tab.url)) {
+        console.log('[BRA Panel] Not asking content script - URL not supported:', tab.url);
+        showNoDetection();
+        return;
+      }
+      
+      // Ask content script directly for its current detection result using safe messaging
+      const response = await messagingUtils.sendMessageToTab(tabId, {
+        action: 'getDetectionStatus'
+      });
+      
+      if (response === null) {
+        // Message failed - check if it's not just "receiving end does not exist"
+        const lastError = chrome.runtime.lastError;
+        if (lastError && !lastError.message?.includes('receiving end does not exist') && 
+            !lastError.message?.includes('Extension context invalidated')) {
+          showError('Error communicating with page');
+        }
+        showNoDetection();
         return;
       }
       
@@ -489,6 +896,9 @@ function askContentScript(tabId) {
       if (response && response.hasResult && response.result) {
         // Use the result directly from content script
         updateUI(response.result);
+      } else {
+        // No result - clear stale data
+        showNoDetection();
       }
     });
     
@@ -589,20 +999,35 @@ function setupConnectionMonitoring() {
   // Check connection and auto-trigger detection if needed
   setInterval(() => {
     if (currentTabId) {
-      // Quietly ping the content script
-      chrome.tabs.sendMessage(currentTabId, { 
-        action: 'ping',
-        timestamp: Date.now()
-      }, function(response) {
-        // Handle error first
-        if (chrome.runtime.lastError) {
-          // Connection lost
+      // First check if we should even try to ping
+      chrome.tabs.get(currentTabId, function(tab) {
+        if (chrome.runtime.lastError || !tab) {
+          return;
+        }
+        
+        // Skip non-government sites
+        if (!isValidContentScriptUrl(tab.url)) {
           if (isConnected) {
-            console.log('[BRA] Connection lost, waiting for reconnection');
+            console.log('[BRA] Tab moved to non-government site');
             isConnected = false;
           }
           return;
         }
+        
+        // Quietly ping the content script
+        chrome.tabs.sendMessage(currentTabId, { 
+          action: 'ping',
+          timestamp: Date.now()
+        }, function(response) {
+          // Handle error first
+          if (chrome.runtime.lastError) {
+            // Connection lost - but don't log for expected cases
+            if (isConnected) {
+              console.log('[BRA] Connection lost, waiting for reconnection');
+              isConnected = false;
+            }
+            return;
+          }
         
         // Successful ping, content script is alive
         if (response && response.alive) {
@@ -644,8 +1069,9 @@ function setupConnectionMonitoring() {
           }
         }
       });
+      }); // End of chrome.tabs.get
     }
-  }, 3000); // Check every 3 seconds
+  }, 2000); // Check every 2 seconds for better responsiveness
   
   // Enable detection for dynamic forms that might load after initial page load
   setTimeout(() => {
@@ -683,8 +1109,16 @@ function updateUI(result) {
   // Throttle updates to prevent flickering (min 500ms between updates)
   const now = Date.now();
   if (lastUpdateResult && (now - lastUpdateTime) < 500) {
-    // If we have a recent update and the new one has lower confidence, skip it
-    if (result.confidenceScore < lastUpdateResult.confidenceScore) {
+    // Special case: ALWAYS update if we're transitioning from form to no-form
+    // This ensures fields are cleared when navigating away from forms
+    const wasForm = lastUpdateResult && lastUpdateResult.isBusinessRegistrationForm;
+    const isForm = result && result.isBusinessRegistrationForm;
+    
+    if (wasForm && !isForm) {
+      console.log('[BRA Panel] Transitioning from form to non-form page - forcing update to clear fields');
+      // Don't return - allow the update to proceed
+    } else if (result && result.confidenceScore < lastUpdateResult.confidenceScore) {
+      // Only skip if we're not transitioning away from a form
       console.log('[BRA Panel] Skipping update with lower confidence to prevent flickering');
       return;
     }
@@ -696,8 +1130,22 @@ function updateUI(result) {
   // Only update the top confidence meter - no duplicate displays
   updateConfidenceMeter(result);
   
-  // Update fields display
+  // ALWAYS update fields display - this ensures stale data is cleared
+  // when moving between pages or when no form is detected
   updateFieldsDisplay(result);
+  
+  // Extra safety: if no business form detected, ensure fields are cleared
+  if (!result || !result.isBusinessRegistrationForm) {
+    console.log('[BRA Panel] No business form - ensuring fields are cleared');
+    if (fieldsList) {
+      fieldsList.innerHTML = '<div class="no-fields-message">No fields detected yet</div>';
+    }
+  }
+  
+  // Clear any errors if we have a valid business form detected
+  if (result && result.isBusinessRegistrationForm) {
+    hideError();
+  }
   
   // Status indicator removed - confidence meter shows detection status
 }
@@ -775,10 +1223,15 @@ function updateConfidenceMeter(result) {
 
 // Show no detection view
 function showNoDetection() {
+  console.log('[BRA Panel] showNoDetection called - clearing all detection data');
   // Status indicator removed - only update confidence meter
   updateConfidenceMeter(null);
   // Clear fields display
   updateFieldsDisplay(null);
+  // Extra safety - force clear fields
+  if (fieldsList) {
+    fieldsList.innerHTML = '<div class="no-fields-message">No fields detected yet</div>';
+  }
 }
 
 // Update the fields display with detected fields
@@ -792,9 +1245,11 @@ function updateFieldsDisplay(result) {
   
   // Clear existing content
   fieldsList.innerHTML = '';
+  console.log('[BRA Panel] Cleared existing field content');
   
   // Check if we have field detection results
   if (!result || !result.fieldDetection || !result.isBusinessRegistrationForm) {
+    console.log('[BRA Panel] No business form detected - showing empty fields message');
     fieldsList.innerHTML = '<div class="no-fields-message">No fields detected yet</div>';
     return;
   }
@@ -805,6 +1260,10 @@ function updateFieldsDisplay(result) {
     'business_address', 'address', 'city', 'state', 'zip',
     'email', 'phone', 'fax', 'dba', 'trade_name',
     'owner_name', 'registered_agent', 'naics_code',
+    'business_structure', 'business_purpose', 'certifications',
+    'ownership_type', 'boolean_field', 'single_select', 'multi_select',
+    'business_selection', 'selection_field', 'business_field',
+    'date_field', 'number_field', 'text_field', 'form_field',
     'other' // Include unclassified fields too
   ];
   
@@ -967,46 +1426,80 @@ function updateFieldsDisplay(result) {
     return;
   }
   
-  // Sort fields by their DOM position (top to bottom order on the form)
+  // Sort fields by their position (Y-coordinate, then X-coordinate)
   classifiedFields.sort((a, b) => {
-    // Try to get position from various sources
+    // First try to use position object with top/left
+    if (a.position && b.position && typeof a.position === 'object' && typeof b.position === 'object') {
+      const topDiff = (a.position.top || 0) - (b.position.top || 0);
+      if (Math.abs(topDiff) > 5) {
+        return topDiff;
+      }
+      // Same row, sort by left position
+      return (a.position.left || 0) - (b.position.left || 0);
+    }
+    
+    // Fall back to numeric position/index
     let posA = Number.MAX_SAFE_INTEGER;
     let posB = Number.MAX_SAFE_INTEGER;
     
-    // Check for explicit position/index
-    if (a.position !== undefined) posA = a.position;
+    if (typeof a.position === 'number') posA = a.position;
     else if (a.index !== undefined) posA = a.index;
     else if (a.order !== undefined) posA = a.order;
     else if (a.domIndex !== undefined) posA = a.domIndex;
     
-    if (b.position !== undefined) posB = b.position;
+    if (typeof b.position === 'number') posB = b.position;
     else if (b.index !== undefined) posB = b.index;
     else if (b.order !== undefined) posB = b.order;
     else if (b.domIndex !== undefined) posB = b.domIndex;
     
-    // If we have element references, try to compare their positions
-    if (a.element && b.element && a.element.compareDocumentPosition) {
-      const position = a.element.compareDocumentPosition(b.element);
-      if (position & Node.DOCUMENT_POSITION_FOLLOWING) {
-        return -1; // a comes before b
-      } else if (position & Node.DOCUMENT_POSITION_PRECEDING) {
-        return 1; // b comes before a
-      }
-    }
-    
-    // Fall back to position numbers if available
-    if (posA !== Number.MAX_SAFE_INTEGER || posB !== Number.MAX_SAFE_INTEGER) {
-      return posA - posB;
-    }
-    
-    // If no position info, maintain original order
-    return 0;
+    return posA - posB;
   });
   
-  console.log('[BRA Panel] Fields sorted by DOM position');
+  console.log('[BRA Panel] Fields sorted by position');
   
-  // Create field items
-  classifiedFields.forEach(field => {
+  // Check if we have sections in the UI data
+  const hasSections = result.fieldDetection.uiData && 
+                     result.fieldDetection.uiData.sections && 
+                     result.fieldDetection.uiData.sections.length > 0;
+  
+  if (hasSections) {
+    // Display fields grouped by sections
+    const categories = result.fieldDetection.uiData.categories;
+    
+    Object.entries(categories).forEach(([sectionKey, section]) => {
+      if (section.fields && section.fields.length > 0) {
+        // Create section header
+        const sectionHeader = document.createElement('div');
+        sectionHeader.className = 'field-section-header';
+        sectionHeader.textContent = section.label;
+        fieldsList.appendChild(sectionHeader);
+        
+        // Sort fields within section by position
+        const sectionFields = section.fields.sort((a, b) => {
+          if (a.position && b.position && typeof a.position === 'object' && typeof b.position === 'object') {
+            const topDiff = (a.position.top || 0) - (b.position.top || 0);
+            if (Math.abs(topDiff) > 5) {
+              return topDiff;
+            }
+            return (a.position.left || 0) - (b.position.left || 0);
+          }
+          return (a.index || 0) - (b.index || 0);
+        });
+        
+        // Display fields in this section
+        sectionFields.forEach(field => {
+          displayField(field);
+        });
+      }
+    });
+  } else {
+    // No sections, display all fields in order
+    classifiedFields.forEach(field => {
+      displayField(field);
+    });
+  }
+  
+  function displayField(field) {
     const fieldItem = document.createElement('div');
     fieldItem.className = 'field-item';
     
@@ -1057,12 +1550,25 @@ function updateFieldsDisplay(result) {
     // Create type element with formatted text
     const typeEl = document.createElement('div');
     typeEl.className = `field-type ${fieldType.replace(/[^a-zA-Z0-9]/g, '_')}`;
-    typeEl.textContent = fieldType.replace(/_/g, ' ');
+    
+    // Format the field type display
+    let typeText = fieldType.replace(/_/g, ' ');
+    
+    // Add additional info for select/radio/checkbox fields
+    if (field.type === 'single_select' || field.type === 'multi_select' || field.type === 'boolean_field') {
+      if (field.options && field.options.length > 0) {
+        typeText += ` (${field.options.length} options)`;
+      } else if (field.originalType) {
+        typeText += ` (${field.originalType})`;
+      }
+    }
+    
+    typeEl.textContent = typeText;
     
     fieldItem.appendChild(labelEl);
     fieldItem.appendChild(typeEl);
     fieldsList.appendChild(fieldItem);
-  });
+  }
   
   console.log(`[BRA Panel] Displayed ${classifiedFields.length} classified fields`);
 }

@@ -3,6 +3,31 @@
  * Simple implementation to display detection results
  */
 
+// Safe messaging wrapper
+const safeRuntimeSendMessage = async (message) => {
+  try {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage(message, (response) => {
+        if (chrome.runtime.lastError) {
+          // Silently handle context invalidation
+          if (!chrome.runtime.lastError.message?.includes('Extension context invalidated') &&
+              !chrome.runtime.lastError.message?.includes('Could not establish connection')) {
+            console.warn('[BRA Popup] Message error:', chrome.runtime.lastError.message);
+          }
+          resolve(null);
+        } else {
+          resolve(response);
+        }
+      });
+    });
+  } catch (error) {
+    if (!error.message?.includes('Extension context invalidated')) {
+      console.error('[BRA Popup] Failed to send message:', error);
+    }
+    return null;
+  }
+};
+
 // DOM elements
 const statusIndicator = document.getElementById('status-indicator');
 const statusText = document.getElementById('status-text');
@@ -46,38 +71,57 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Get detection result from background script
-function getDetectionResult(tabId) {
-  chrome.runtime.sendMessage({
+async function getDetectionResult(tabId) {
+  const response = await safeRuntimeSendMessage({
     action: 'getDetectionResult',
     tabId: tabId
-  }, function(response) {
-    if (response && response.success && response.result) {
-      // Show detection result
-      updateUI(response.result);
-    } else {
-      // Try asking content script directly
-      askContentScript(tabId);
-    }
   });
+  
+  if (response && response.success && response.result) {
+    // Show detection result
+    updateUI(response.result);
+  } else {
+    // Try asking content script directly
+    askContentScript(tabId);
+  }
 }
 
+// Safe tab message wrapper
+const safeTabSendMessage = async (tabId, message) => {
+  try {
+    return new Promise((resolve) => {
+      chrome.tabs.sendMessage(tabId, message, (response) => {
+        if (chrome.runtime.lastError) {
+          // Silently handle expected errors
+          if (!chrome.runtime.lastError.message?.includes('Extension context invalidated') &&
+              !chrome.runtime.lastError.message?.includes('Receiving end does not exist')) {
+            console.warn('[BRA Popup] Tab message error:', chrome.runtime.lastError.message);
+          }
+          resolve(null);
+        } else {
+          resolve(response);
+        }
+      });
+    });
+  } catch (error) {
+    if (!error.message?.includes('Extension context invalidated')) {
+      console.error('[BRA Popup] Failed to send tab message:', error);
+    }
+    return null;
+  }
+};
+
 // Ask content script for results if background doesn't have them
-function askContentScript(tabId) {
-  chrome.tabs.sendMessage(tabId, {
+async function askContentScript(tabId) {
+  const response = await safeTabSendMessage(tabId, {
     action: 'getDetectionResult'
-  }, function(result) {
-    if (chrome.runtime.lastError) {
-      // Content script not available
-      showNoDetection();
-      return;
-    }
-    
-    if (result) {
-      updateUI(result);
-    } else {
-      showNoDetection();
-    }
   });
+  
+  if (response) {
+    updateUI(response);
+  } else {
+    showNoDetection();
+  }
 }
 
 // Update UI with detection result

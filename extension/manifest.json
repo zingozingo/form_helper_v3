@@ -36,8 +36,7 @@
     "*://*.sunbiz.org/*"
   ],
   "background": {
-    "service_worker": "background.js",
-    "type": "module"
+    "service_worker": "background.js"
   },
   "content_scripts": [
     {
@@ -96,6 +95,7 @@
       "resources": [
         "modules/urlDetector.js", 
         "modules/fieldDetector.js",
+        "modules/messagingUtils.js",
         "modules/knowledgeLoader.js",
         "knowledge/common/*.json",
         "knowledge/states/*.json",

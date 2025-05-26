@@ -549,3 +549,22 @@ footer {
   color: #999;
   text-align: right;
 }
+
+/* Section headers for field grouping */
+.field-section-header {
+  font-weight: bold;
+  font-size: 14px;
+  color: #1a4c87;
+  background-color: #f0f5fb;
+  margin: 12px -12px 8px -12px;
+  padding: 8px 12px;
+  border-top: 1px solid #d4e2f3;
+  border-bottom: 1px solid #d4e2f3;
+}
+
+.field-section-header:first-child {
+  margin-top: -12px;
+  border-top: none;
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+}
