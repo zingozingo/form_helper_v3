@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Business Registration Assistant</title>
+  <link rel="stylesheet" href="panel_standalone.css">
+</head>
+<body>
+  <div id="panel-container">
+    <!-- Header Section -->
+    <div class="panel-header">
+      <div class="header-icon">📋</div>
+      <div class="header-content">
+        <h1>Business Registration Assistant</h1>
+        <div id="state-badge" class="state-badge">Detecting...</div>
+      </div>
+    </div>
+
+    <!-- Status Section -->
+    <div class="status-section">
+      <div id="confidence-score" class="confidence-score">
+        <div class="confidence-label">Form Detection Confidence</div>
+        <div class="confidence-bar">
+          <div id="confidence-fill" class="confidence-fill"></div>
+        </div>
+        <div id="confidence-value" class="confidence-value">0%</div>
+      </div>
+    </div>
+
+    <!-- Fields Section -->
+    <div id="fields-section" class="fields-section">
+      <h2>Detected Form Fields</h2>
+      <div id="fields-container" class="fields-container">
+        <!-- Field sections will be dynamically inserted here -->
+      </div>
+    </div>
+
+    <!-- Actions Section -->
+    <div id="actions-section" class="actions-section">
+      <button id="autofill-btn" class="action-btn primary">
+        <span class="btn-icon">✨</span>
+        Auto Fill Sample Data
+      </button>
+      <button id="validate-btn" class="action-btn secondary">
+        <span class="btn-icon">✓</span>
+        Validate Fields
+      </button>
+    </div>
+
+    <!-- Chat Section -->
+    <div id="chat-section" class="chat-section">
+      <div class="chat-header">
+        <h3>Assistant</h3>
+        <button id="chat-toggle" class="chat-toggle">−</button>
+      </div>
+      <div id="chat-content" class="chat-content">
+        <div id="chat-messages" class="chat-messages">
+          <div class="chat-message assistant">
+            <div class="message-icon">🤖</div>
+            <div class="message-content">
+              Hello! I'm here to help you fill out this business registration form. I've detected the form fields and can assist you with completing them.
+            </div>
+          </div>
+        </div>
+        <div class="chat-input-container">
+          <input type="text" id="chat-input" class="chat-input" placeholder="Ask me anything about this form...">
+          <button id="chat-send" class="chat-send">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error Section (hidden by default) -->
+    <div id="error-section" class="error-section" style="display: none;">
+      <div class="error-icon">⚠️</div>
+      <div class="error-message">
+        <h3>Not a Business Registration Form</h3>
+        <p>This page doesn't appear to be a business registration form. The extension works on government business registration websites.</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="panel_standalone.js"></script>
+</body>
+</html>
